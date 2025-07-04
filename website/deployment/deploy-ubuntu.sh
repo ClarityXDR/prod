@@ -78,6 +78,8 @@ check_prerequisites() {
     local ram_gb=$(free -g | awk '/^Mem:/{print $2}')
     local cpu_cores=$(nproc)
     
+    print_message $BLUE "System specs: ${ram_gb}GB RAM, ${cpu_cores} CPU cores"
+    
     if [[ $ram_gb -lt 4 ]]; then
         print_message $YELLOW "Warning: Less than 4GB RAM detected. ClarityXDR may run slowly."
         read -p "Continue anyway? (y/N): " continue_low_ram
@@ -86,26 +88,42 @@ check_prerequisites() {
         fi
     fi
     
-    if [[ $cpu_cores -lt 2 ]]; then
-        print_message $YELLOW "Warning: Less than 2 CPU cores detected. Performance may be impacted."
+    # Update package list with better error handling
+    print_message $BLUE "Updating package list..."
+    if ! apt-get update; then
+        print_message $RED "Failed to update package list. Please check your internet connection."
+        exit 1
     fi
     
-    # Install required packages
-    print_message $BLUE "Installing required packages..."
-    apt-get update -qq
-    apt-get install -y -qq curl git docker.io docker-compose openssl apache2-utils > /dev/null 2>&1
+    # Install required packages one by one with progress
+    local packages=("curl" "git" "docker.io" "docker-compose" "openssl" "apache2-utils")
+    
+    for package in "${packages[@]}"; do
+        print_message $BLUE "Installing $package..."
+        if ! apt-get install -y "$package"; then
+            print_message $RED "Failed to install $package"
+            exit 1
+        fi
+    done
     
     # Start and enable Docker
+    print_message $BLUE "Starting Docker service..."
     systemctl start docker
     systemctl enable docker
     
     # Add current user to docker group if not root
     if [[ -n "$SUDO_USER" ]]; then
         usermod -aG docker "$SUDO_USER"
-        print_message $GREEN "Added $SUDO_USER to docker group (logout/login required for effect)"
+        print_message $GREEN "Added $SUDO_USER to docker group"
     fi
     
-    print_message $GREEN "Prerequisites check completed"
+    # Verify Docker is working
+    if ! docker --version > /dev/null 2>&1; then
+        print_message $RED "Docker installation failed"
+        exit 1
+    fi
+    
+    print_message $GREEN "Prerequisites check completed successfully"
 }
 
 collect_configuration() {
@@ -114,7 +132,8 @@ collect_configuration() {
     
     # Domain name
     while true; do
-        read -p "Enter your domain name (e.g., portal.clarityxdr.com): " DOMAIN_NAME
+        echo -n "Enter your domain name (e.g., portal.clarityxdr.com): "
+        read DOMAIN_NAME
         if validate_domain "$DOMAIN_NAME"; then
             break
         else
@@ -124,7 +143,8 @@ collect_configuration() {
     
     # Email for SSL certificates
     while true; do
-        read -p "Enter your email for SSL certificates: " ACME_EMAIL
+        echo -n "Enter your email for SSL certificates: "
+        read ACME_EMAIL
         if validate_email "$ACME_EMAIL"; then
             break
         else
@@ -133,13 +153,17 @@ collect_configuration() {
     done
     
     # OpenAI API Key
-    read -p "Enter your OpenAI API Key (optional, press Enter to skip): " OPENAI_API_KEY
+    echo -n "Enter your OpenAI API Key (optional, press Enter to skip): "
+    read OPENAI_API_KEY
     
     # Azure OpenAI (optional)
-    read -p "Enter Azure OpenAI Endpoint (optional, press Enter to skip): " AZURE_OPENAI_ENDPOINT
+    echo -n "Enter Azure OpenAI Endpoint (optional, press Enter to skip): "
+    read AZURE_OPENAI_ENDPOINT
     if [[ -n "$AZURE_OPENAI_ENDPOINT" ]]; then
-        read -p "Enter Azure OpenAI API Key: " AZURE_OPENAI_API_KEY
-        read -p "Enter Azure OpenAI Deployment Name: " AZURE_OPENAI_DEPLOYMENT
+        echo -n "Enter Azure OpenAI API Key: "
+        read AZURE_OPENAI_API_KEY
+        echo -n "Enter Azure OpenAI Deployment Name: "
+        read AZURE_OPENAI_DEPLOYMENT
     fi
     
     # Generate secure passwords and keys
@@ -163,9 +187,16 @@ setup_application() {
     mkdir -p /opt/clarityxdr
     cd /opt/clarityxdr
     
-    # Clone repository
-    print_message $BLUE "Downloading ClarityXDR from GitHub..."
-    git clone https://github.com/ClarityXDR/prod.git . > /dev/null 2>&1
+    # Remove any existing installation
+    if [[ -d ".git" ]]; then
+        print_message $YELLOW "Existing installation found, updating..."
+        git pull
+    else
+        # Clone repository
+        print_message $BLUE "Downloading ClarityXDR from GitHub..."
+        git clone https://github.com/ClarityXDR/prod.git .
+    fi
+    
     cd website
     
     # Create required directories
@@ -217,27 +248,41 @@ EOF
 }
 
 apply_optimizations() {
-    print_message $BLUE "Applying Ubuntu optimizations for Docker..."
+    print_message $BLUE "System optimizations available..."
     
-    # Make optimization script executable
-    chmod +x ubuntu-optimizations.sh
-    
-    # Run optimizations
-    print_message $YELLOW "This will optimize your system for Docker and may restart the Docker service."
-    read -p "Apply system optimizations? (Y/n): " apply_opts
-    if [[ "$apply_opts" =~ ^[Nn]$ ]]; then
-        print_message $YELLOW "Skipping system optimizations"
+    # Make optimization script executable if it exists
+    if [[ -f "ubuntu-optimizations.sh" ]]; then
+        chmod +x ubuntu-optimizations.sh
+        
+        echo -n "Apply system optimizations for Docker? (Y/n): "
+        read apply_opts
+        if [[ "$apply_opts" =~ ^[Nn]$ ]]; then
+            print_message $YELLOW "Skipping system optimizations"
+        else
+            print_message $BLUE "Applying optimizations..."
+            echo "y" | ./ubuntu-optimizations.sh
+            print_message $GREEN "System optimizations applied"
+        fi
     else
-        echo "y" | ./ubuntu-optimizations.sh
-        print_message $GREEN "System optimizations applied"
+        print_message $YELLOW "Optimization script not found, skipping"
     fi
 }
 
 start_services() {
     print_message $BLUE "Starting ClarityXDR services..."
     
+    # Check if docker-compose.yml exists
+    if [[ ! -f "docker-compose.yml" ]]; then
+        print_message $RED "docker-compose.yml not found in $(pwd)"
+        print_message $RED "Please check the repository structure"
+        exit 1
+    fi
+    
     # Pull images and start services
+    print_message $BLUE "Pulling Docker images..."
     docker-compose pull
+    
+    print_message $BLUE "Starting services..."
     docker-compose up -d
     
     # Wait for services to start
@@ -245,24 +290,10 @@ start_services() {
     sleep 30
     
     # Check service health
-    local healthy_services=0
-    local total_services=0
+    print_message $BLUE "Checking service status..."
+    docker-compose ps
     
-    for service in $(docker-compose ps --services); do
-        total_services=$((total_services + 1))
-        if docker-compose ps "$service" | grep -q "Up"; then
-            healthy_services=$((healthy_services + 1))
-            print_message $GREEN "✓ $service is running"
-        else
-            print_message $RED "✗ $service failed to start"
-        fi
-    done
-    
-    if [[ $healthy_services -eq $total_services ]]; then
-        print_message $GREEN "All services started successfully!"
-    else
-        print_message $YELLOW "Some services may need more time to start. Check with: docker-compose logs"
-    fi
+    print_message $GREEN "Services started! Check above for status."
 }
 
 display_completion_info() {
@@ -279,23 +310,15 @@ display_completion_info() {
     echo "  • Username: admin"
     echo "  • Password: $TRAEFIK_ADMIN_PASSWORD"
     echo ""
-    echo -e "${BLUE}Database Information:${NC}"
-    echo "  • Database: clarityxdr"
-    echo "  • Username: postgres"
-    echo "  • Password: $POSTGRES_PASSWORD"
-    echo ""
     echo -e "${BLUE}Important Notes:${NC}"
-    echo "  • SSL certificates will be automatically generated by Let's Encrypt"
-    echo "  • Make sure your domain DNS points to this server's IP address"
-    echo "  • Firewall ports 80 and 443 must be open for web access"
+    echo "  • Make sure DNS for $DOMAIN_NAME points to this server"
+    echo "  • SSL certificates will be generated automatically"
+    echo "  • Allow firewall access to ports 80 and 443"
     echo ""
     echo -e "${BLUE}Management Commands:${NC}"
     echo "  • View logs: cd /opt/clarityxdr/website && docker-compose logs -f"
-    echo "  • Restart services: cd /opt/clarityxdr/website && docker-compose restart"
-    echo "  • Stop services: cd /opt/clarityxdr/website && docker-compose down"
-    echo "  • Update application: cd /opt/clarityxdr && git pull && cd website && docker-compose up -d"
-    echo ""
-    echo -e "${GREEN}Save this information in a secure location!${NC}"
+    echo "  • Restart: cd /opt/clarityxdr/website && docker-compose restart"
+    echo "  • Stop: cd /opt/clarityxdr/website && docker-compose down"
     echo ""
     
     # Save credentials to file
@@ -312,14 +335,8 @@ Dashboard Credentials:
 - Username: admin
 - Password: $TRAEFIK_ADMIN_PASSWORD
 
-Database Information:
-- Database: clarityxdr
-- Username: postgres
-- Password: $POSTGRES_PASSWORD
-
+Database Password: $POSTGRES_PASSWORD
 Redis Password: $REDIS_PASSWORD
-Encryption Key: $ENCRYPTION_KEY
-JWT Secret: $JWT_SECRET
 EOF
     
     chmod 600 /opt/clarityxdr/credentials.txt
