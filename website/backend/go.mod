@@ -1,9 +1,14 @@
 module github.com/ClarityXDR/backend
 
-go 1.18
+go 1.23.0
+
+toolchain go1.24.2
 
 require (
+	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
-	golang.org/x/crypto v0.17.0
+	github.com/rs/cors v1.10.1
+	golang.org/x/crypto v0.39.0
+	golang.org/x/time v0.12.0
 )

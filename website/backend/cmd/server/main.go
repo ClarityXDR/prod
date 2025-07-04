@@ -92,9 +92,9 @@ func main() {
 	}()
 
 	// Graceful shutdown
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
 
 	// Create a deadline for shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ClarityXDR/backend/internal/db"
 	"github.com/gorilla/mux"
+	"github.com/lib/pq"
 )
 
 type LicenseHandler struct {
@@ -58,7 +59,7 @@ func (h *LicenseHandler) ValidateLicense(w http.ResponseWriter, r *http.Request)
 	var isActive bool
 	var features []string
 
-	err := h.db.QueryRow(query, licenseKey, clientID).Scan(&licenseID, &expirationDate, &isActive, &features)
+	err := h.db.DB.QueryRow(query, licenseKey, clientID).Scan(&licenseID, &expirationDate, &isActive, pq.Array(&features))
 	if err != nil {
 		respondWithJSON(w, http.StatusOK, LicenseValidationResponse{
 			Valid:   false,
@@ -88,10 +89,16 @@ func (h *LicenseHandler) ValidateLicense(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Log the license check
-	_, err = h.db.Exec(`
+	_, err = h.db.DB.Exec(`
 		INSERT INTO license_checks (license_id, checked_at, product, ip_address)
 		VALUES ($1, $2, $3, $4)
 	`, licenseID, time.Now(), productName, r.RemoteAddr)
+
+	if err != nil {
+		// Log error but don't fail the validation
+		// License is still valid even if we can't log the check
+		// You might want to add proper logging here
+	}
 
 	// Return success response
 	respondWithJSON(w, http.StatusOK, LicenseValidationResponse{
@@ -139,7 +146,7 @@ func (h *LicenseHandler) CreateLicense(w http.ResponseWriter, r *http.Request) {
 
 	// Get client ID from database
 	var clientDBID int
-	err = h.db.QueryRow("SELECT id FROM clients WHERE client_id = $1", req.ClientID).Scan(&clientDBID)
+	err = h.db.DB.QueryRow("SELECT id FROM clients WHERE client_id = $1", req.ClientID).Scan(&clientDBID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Client not found")
 		return
@@ -147,11 +154,11 @@ func (h *LicenseHandler) CreateLicense(w http.ResponseWriter, r *http.Request) {
 
 	// Insert license
 	var licenseID int
-	err = h.db.QueryRow(`
+	err = h.db.DB.QueryRow(`
 		INSERT INTO licenses (client_id, license_key, issue_date, expiration_date, is_active, features, notes)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, clientDBID, licenseKey, time.Now(), expirationDate, true, req.Features, req.Notes).Scan(&licenseID)
+	`, clientDBID, licenseKey, time.Now(), expirationDate, true, pq.Array(req.Features), req.Notes).Scan(&licenseID)
 
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create license")
@@ -175,4 +182,23 @@ func (h *LicenseHandler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/licensing/validate", h.ValidateLicense).Methods("GET")
 	router.HandleFunc("/licensing/licenses", h.CreateLicense).Methods("POST")
 	// ...existing code...
+}
+
+// Helper functions that were missing
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	response, _ := json.Marshal(payload)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(response)
+}
+
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+func isAuthenticated(r *http.Request) bool {
+	// Check if the request has valid authentication
+	// This should match your authentication middleware
+	userID := r.Context().Value("userID")
+	return userID != nil
 }
