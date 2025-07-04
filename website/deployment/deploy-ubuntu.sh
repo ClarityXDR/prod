@@ -138,57 +138,45 @@ EOF
             chmod +x /usr/local/bin/docker-compose
             print_message $GREEN "Created docker-compose wrapper for docker compose plugin"
         else
-            # Try to install via apt first
-            print_message $BLUE "Trying apt installation..."
-            if apt-get install -y -qq docker-compose; then
-                print_message $GREEN "Docker Compose installed via apt"
-            else
-                # Ubuntu 24.04+ requires pipx rather than pip
-                print_message $BLUE "Installing via pipx (recommended for Ubuntu 24.04+)..."
-                apt-get install -y -qq python3-pip python3-venv pipx
-                
-                # Add pipx bin directory to PATH
-                export PATH="$PATH:$HOME/.local/bin"
-                print_message $BLUE "Installing docker-compose with pipx..."
-                
-                if ! command -v pipx &> /dev/null; then
-                    print_message $RED "pipx not available, creating Python virtual environment instead"
-                    # Create a virtual environment and install docker-compose there
-                    apt-get install -y -qq python3-full
-                    python3 -m venv /opt/docker-compose-venv
-                    /opt/docker-compose-venv/bin/pip install docker-compose
-                    
-                    # Create a symlink to the docker-compose binary
-                    ln -sf /opt/docker-compose-venv/bin/docker-compose /usr/local/bin/docker-compose
-                    print_message $GREEN "Docker Compose installed in virtual environment"
-                else
-                    # Use pipx
-                    pipx install docker-compose
-                    # Create a symlink if needed
-                    if [ ! -f "/usr/local/bin/docker-compose" ]; then
-                        ln -sf ~/.local/bin/docker-compose /usr/local/bin/docker-compose
-                    fi
-                    print_message $GREEN "Docker Compose installed via pipx"
-                fi
-            fi
+            # Best practice: Create isolated virtual environment for Docker Compose
+            print_message $BLUE "Setting up isolated virtual environment for Docker Compose..."
+            
+            # Install required packages
+            apt-get install -y -qq python3-full
+            
+            # Create dedicated virtual environment
+            python3 -m venv /opt/docker-compose-venv
+            
+            # Set secure permissions
+            chown -R root:root /opt/docker-compose-venv
+            chmod -R 755 /opt/docker-compose-venv
+            
+            # Install docker-compose in virtual environment
+            print_message $BLUE "Installing Docker Compose in virtual environment..."
+            /opt/docker-compose-venv/bin/pip install --no-cache-dir docker-compose
+            
+            # Create secure wrapper script
+            print_message $BLUE "Creating secure Docker Compose wrapper..."
+            cat > /usr/local/bin/docker-compose <<EOF
+#!/bin/bash
+# Secure wrapper for docker-compose installed in isolated virtual environment
+/opt/docker-compose-venv/bin/docker-compose "\$@"
+EOF
+            chmod 755 /usr/local/bin/docker-compose
+            
+            print_message $GREEN "Docker Compose installed in isolated virtual environment (PEP 668 compliant)"
         fi
     fi
     
     # Verify Docker Compose installation
     if ! command -v docker-compose &> /dev/null; then
-        print_message $YELLOW "docker-compose not found in PATH, checking docker compose plugin..."
-        if docker compose version &> /dev/null; then
-            print_message $GREEN "Docker Compose plugin is available, using it instead"
-            cat > /usr/local/bin/docker-compose <<EOF
-#!/bin/bash
-docker compose "\$@"
-EOF
-            chmod +x /usr/local/bin/docker-compose
-        else
-            print_message $RED "No Docker Compose installation found. Deployment may fail."
-        fi
+        print_message $RED "Docker Compose installation failed"
+        exit 1
+    else
+        docker-compose --version
+        print_message $GREEN "Docker Compose is ready"
     fi
-    
+
     print_message $BLUE "Installing utilities..."
     apt-get install -y -qq curl git openssl apache2-utils
     
@@ -357,6 +345,28 @@ Traefik Login:
 - Password: $TRAEFIK_ADMIN_PASSWORD
 
 Database:
+- Password: $POSTGRES_PASSWORD
+
+Redis:
+- Password: $REDIS_PASSWORD
+EOF
+    
+    chmod 600 /opt/clarityxdr/CREDENTIALS.txt
+    print_message $GREEN "Credentials saved to /opt/clarityxdr/CREDENTIALS.txt"
+}
+
+main() {
+    print_banner
+    check_prerequisites
+    install_packages
+    collect_configuration
+    setup_application
+    start_services
+    display_results
+}
+
+# Run main function
+main "$@"
 - Password: $POSTGRES_PASSWORD
 
 Redis:
