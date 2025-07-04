@@ -33,6 +33,13 @@ For a one-line deployment to your Ubuntu server:
 curl -sSL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/website/deployment/deploy-ubuntu.sh | sudo bash
 ```
 
+This one-liner will:
+1. Download and set up the application
+2. Launch an interactive prompt to configure all required environment variables
+3. Generate secure random passwords and encryption keys automatically
+4. Apply system optimizations with your confirmation
+5. Start all services with Docker Compose
+
 For more control over the deployment process:
 
 ```bash
@@ -41,7 +48,10 @@ mkdir -p /opt/clarityxdr && cd /opt/clarityxdr
 git clone https://github.com/ClarityXDR/prod.git .
 cd website
 
-# Configure environment variables
+# Configure environment variables (interactive mode)
+./setup-env.sh
+
+# Or configure manually
 cp .env.example .env
 nano .env  # Edit with your specific values
 
@@ -74,18 +84,73 @@ Alternatively, use the PowerShell or Bash scripts in the `deployment` folder:
 
 ## Configuration
 
-### Environment Variables
+### Environment Variables Setup
 
-The `.env` file contains all necessary configuration options. Key variables include:
+During installation, you'll be prompted to configure several critical environment variables. Below is a detailed explanation of the key variables to help you set them correctly:
 
-- `DOMAIN_NAME`: Your domain name for the application
-- `POSTGRES_PASSWORD`: Secure password for the database
-- `REDIS_PASSWORD`: Secure password for Redis
-- `ENCRYPTION_KEY`: 32-character encryption key for sensitive data
-- `JWT_SECRET`: Secret key for JWT authentication
-- `OPENAI_API_KEY`: API key for OpenAI services
+- `DOMAIN_NAME`: The fully qualified domain name where your application will be hosted (e.g., `portal.clarityxdr.com` or `xdr.yourdomain.com`). This is used for SSL certificates and service discovery. Do NOT include http:// or https:// prefixes.
 
-See `.env.example` for a complete list of available options.
+- `ACME_EMAIL`: Your email address for Let's Encrypt SSL certificate notifications.
+
+- `TRAEFIK_DASHBOARD_AUTH`: Username/password for the Traefik dashboard in htpasswd format. You can generate this using: 
+  ```
+  echo $(htpasswd -nb admin YourSecurePassword)
+  ```
+
+- `POSTGRES_DB`: Database name (default: clarityxdr).
+
+- `POSTGRES_USER`: Database username (default: postgres).
+
+- `POSTGRES_PASSWORD`: A strong, secure password for the PostgreSQL database. Recommended to use a randomly generated password of at least 16 characters including special characters.
+
+- `REDIS_PASSWORD`: A strong, secure password for Redis. Similar recommendations as for POSTGRES_PASSWORD.
+
+- `ENCRYPTION_KEY`: A 32-character encryption key used to secure sensitive data. Must be exactly 32 characters long. You can generate this using:
+  ```
+  openssl rand -base64 24
+  ```
+
+- `JWT_SECRET`: Secret key used for JWT token signing and verification. Should be a strong random string. You can generate this using:
+  ```
+  openssl rand -base64 32
+  ```
+
+- `JWT_EXPIRES_IN`: JWT token expiration time (default: 24h).
+
+- `OPENAI_API_KEY`: Your OpenAI API key for AI agent functionality. Obtain this from your OpenAI account.
+
+- `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT`: If using Azure OpenAI instead of OpenAI directly, provide these values from your Azure OpenAI resource.
+
+### Interactive Setup Helper
+
+For convenience, the deployment script includes an interactive setup helper that will guide you through configuring these variables:
+
+```bash
+# Interactive setup
+cd /opt/clarityxdr/website
+./setup-env.sh
+```
+
+This script will:
+1. Generate secure random passwords
+2. Prompt you for required external services like OpenAI
+3. Create a properly configured .env file
+4. Validate your configuration before deployment
+
+### Manual Configuration
+
+If you prefer to configure manually:
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your preferred text editor
+nano .env
+
+# Validate your configuration
+./validate-env.sh
+```
 
 ## Architecture
 
