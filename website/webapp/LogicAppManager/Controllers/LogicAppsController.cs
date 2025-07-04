@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using ClarityXDR.WebApp.LicenseManager.Models;
-using ClarityXDR.WebApp.LogicAppManager;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ClarityXDR.WebApp.LogicAppManager;
+using ClarityXDR.WebApp.Data;
+using ClarityXDR.WebApp.Models;
 
 namespace ClarityXDR.WebApp.Controllers
 {

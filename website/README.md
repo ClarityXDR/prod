@@ -16,6 +16,7 @@ ClarityXDR is an AI-driven security operations platform that transforms Microsof
 - **Multi-tenant Architecture**: Each client has their own isolated environment and dedicated resources
 - **Modern React UI**: Sleek, responsive user interface with real-time visualizations
 - **GitHub Integration**: AI agents operate via GitHub Issues, with customized Mission Control Protocol (MCP) guidelines for each agent type
+- **Logic App Management**: Deploy and manage Azure Logic Apps with integrated license validation
 
 ## Prerequisites
 
@@ -203,9 +204,13 @@ docker-compose -f docker-compose.dev.yml up
 - `/frontend`: React frontend application
 - `/backend`: Go backend API server
 - `/agent-orchestrator`: Python service for AI agent management
+- `/webapp`: ASP.NET Core web application for Logic App management
+  - `/LogicAppManager`: Logic App deployment service and controllers
+  - `/ClientApp`: React components for Logic App UI
 - `/init-scripts`: Database initialization scripts
 - `/deployment`: Deployment scripts for various platforms
 - `/azure-deployment`: Azure-specific deployment templates
+- `/templates`: Logic App templates and configurations
 
 ## Security
 
