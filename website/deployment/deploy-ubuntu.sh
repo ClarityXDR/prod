@@ -126,36 +126,66 @@ install_packages() {
         print_message $GREEN "Docker Compose already installed"
         docker-compose --version
     else
-        # Try multiple methods
-        print_message $BLUE "Trying apt installation..."
-        if apt-get install -y -qq docker-compose; then
-            print_message $GREEN "Docker Compose installed via apt"
+        # First check if Docker Compose plugin is available (modern Docker installations include this)
+        print_message $BLUE "Checking for Docker Compose plugin..."
+        if docker compose version &> /dev/null; then
+            print_message $GREEN "Docker Compose plugin is available, creating compatibility script"
+            # Create a docker-compose script that calls docker compose
+            cat > /usr/local/bin/docker-compose <<EOF
+#!/bin/bash
+docker compose "\$@"
+EOF
+            chmod +x /usr/local/bin/docker-compose
+            print_message $GREEN "Created docker-compose wrapper for docker compose plugin"
         else
-            print_message $YELLOW "Trying docker compose plugin..."
-            # Check if docker compose plugin is available (newer Docker versions)
-            if docker compose version &> /dev/null; then
-                print_message $GREEN "Docker Compose plugin is available"
-                # Create symlink for compatibility
-                ln -sf $(which docker) /usr/local/bin/docker-compose
-                echo '#!/bin/bash
-docker compose "$@"' > /usr/local/bin/docker-compose
-                chmod +x /usr/local/bin/docker-compose
+            # Try to install via apt first
+            print_message $BLUE "Trying apt installation..."
+            if apt-get install -y -qq docker-compose; then
+                print_message $GREEN "Docker Compose installed via apt"
             else
-                print_message $YELLOW "Trying pipx installation..."
-                # Try pipx (recommended for Ubuntu 24.04+)
-                apt-get install -y -qq pipx
-                if pipx install docker-compose; then
-                    # Add to PATH
-                    echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
-                    export PATH=$PATH:~/.local/bin
-                    print_message $GREEN "Docker Compose installed via pipx"
+                # Ubuntu 24.04+ requires pipx rather than pip
+                print_message $BLUE "Installing via pipx (recommended for Ubuntu 24.04+)..."
+                apt-get install -y -qq python3-pip python3-venv pipx
+                
+                # Add pipx bin directory to PATH
+                export PATH="$PATH:$HOME/.local/bin"
+                print_message $BLUE "Installing docker-compose with pipx..."
+                
+                if ! command -v pipx &> /dev/null; then
+                    print_message $RED "pipx not available, creating Python virtual environment instead"
+                    # Create a virtual environment and install docker-compose there
+                    apt-get install -y -qq python3-full
+                    python3 -m venv /opt/docker-compose-venv
+                    /opt/docker-compose-venv/bin/pip install docker-compose
+                    
+                    # Create a symlink to the docker-compose binary
+                    ln -sf /opt/docker-compose-venv/bin/docker-compose /usr/local/bin/docker-compose
+                    print_message $GREEN "Docker Compose installed in virtual environment"
                 else
-                    print_message $YELLOW "Using pip with system override..."
-                    apt-get install -y -qq python3-pip python3-venv
-                    # Use --break-system-packages as last resort
-                    pip3 install --break-system-packages docker-compose
+                    # Use pipx
+                    pipx install docker-compose
+                    # Create a symlink if needed
+                    if [ ! -f "/usr/local/bin/docker-compose" ]; then
+                        ln -sf ~/.local/bin/docker-compose /usr/local/bin/docker-compose
+                    fi
+                    print_message $GREEN "Docker Compose installed via pipx"
                 fi
             fi
+        fi
+    fi
+    
+    # Verify Docker Compose installation
+    if ! command -v docker-compose &> /dev/null; then
+        print_message $YELLOW "docker-compose not found in PATH, checking docker compose plugin..."
+        if docker compose version &> /dev/null; then
+            print_message $GREEN "Docker Compose plugin is available, using it instead"
+            cat > /usr/local/bin/docker-compose <<EOF
+#!/bin/bash
+docker compose "\$@"
+EOF
+            chmod +x /usr/local/bin/docker-compose
+        else
+            print_message $RED "No Docker Compose installation found. Deployment may fail."
         fi
     fi
     
