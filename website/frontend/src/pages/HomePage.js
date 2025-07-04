@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import ParticlesBackground from '../components/ParticlesBackground';
 import './HomePage.css';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
   const [threatCount, setThreatCount] = useState(1542);
   const [query, setQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Get initial threat count from backend
@@ -28,12 +31,18 @@ const HomePage = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (query.trim()) {
+      setIsLoading(true);
+      
       axios.post('/api/queries', { query: query.trim() })
         .then(response => {
           console.log("Query submitted:", response.data);
-          setQuery('');
+          // Redirect to the results page
+          navigate(`/query-results/${response.data.id}`);
         })
-        .catch(error => console.error("Error submitting query:", error));
+        .catch(error => {
+          console.error("Error submitting query:", error);
+          setIsLoading(false);
+        });
     }
   };
 
@@ -53,7 +62,7 @@ const HomePage = () => {
           <div className="hero-title">
             <span className="brand">Clarity</span><span className="xdr">XDR</span>
             <span className="line1">Architected by Humans</span>
-            <span className="line2">Run entirely by AI and ML</span>
+            <span className="line2">Operated by AI and ML</span>
           </div>
           <div className="hero-sub">
             Find clarity in chaos — transform Defender XDR into a mature, AI-driven SOC overnight.
@@ -65,11 +74,14 @@ const HomePage = () => {
                 placeholder="Ask your security question..." 
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                disabled={isLoading}
               />
             </div>
             <div className="ctas">
-              <a className="btn btn-secondary" href="/features">Explore Demo</a>
-              <button type="submit" className="btn btn-primary">Get Started</button>
+              <a className="btn btn-secondary" href="/features">Explore Features</a>
+              <button type="submit" className="btn btn-primary" disabled={isLoading}>
+                {isLoading ? 'Processing...' : 'Get Started'}
+              </button>
             </div>
           </form>
           <div className="ticker">

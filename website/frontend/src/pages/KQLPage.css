@@ -1,0 +1,192 @@
+.kql-container {
+  background: rgba(10, 14, 35, 0.7);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--teal);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.kql-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(245, 247, 250, 0.1);
+}
+
+.toolbar-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  flex: 1;
+}
+
+.toolbar-item label {
+  margin-bottom: 5px;
+  font-size: 0.9rem;
+  color: var(--white);
+}
+
+.toolbar-item select {
+  padding: 8px 12px;
+  background: rgba(10, 14, 35, 0.8);
+  border: 1px solid var(--teal);
+  border-radius: 4px;
+  color: var(--white);
+  font-size: 1rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23F5F7FA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.kql-editor {
+  margin-bottom: 20px;
+}
+
+.kql-editor textarea {
+  width: 100%;
+  padding: 15px;
+  background: rgba(10, 14, 35, 0.8);
+  border: 1px solid var(--teal);
+  border-radius: 4px;
+  color: var(--white);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.95rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.kql-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.btn-run-query {
+  background-color: var(--lime);
+  color: #0A0E23;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.btn-run-query:hover {
+  background-color: rgba(124, 219, 70, 0.8);
+}
+
+.btn-run-query:disabled {
+  background-color: rgba(124, 219, 70, 0.5);
+  cursor: not-allowed;
+}
+
+.btn-save-template {
+  background-color: var(--teal);
+  color: var(--white);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.btn-save-template:hover {
+  background-color: rgba(0, 131, 168, 0.8);
+}
+
+.btn-save-template:disabled {
+  background-color: rgba(0, 131, 168, 0.5);
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: rgba(255, 69, 0, 0.2);
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.kql-results {
+  background: rgba(10, 14, 35, 0.8);
+  border: 1px solid rgba(245, 247, 250, 0.1);
+  border-radius: 4px;
+  padding: 15px;
+  margin-top: 20px;
+  overflow: auto;
+  max-height: 500px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+
+.loading-container p {
+  margin-top: 15px;
+  color: var(--white);
+}
+
+.results-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
+  color: rgba(245, 247, 250, 0.8);
+}
+
+.query-results-table {
+  overflow: auto;
+}
+
+.query-results-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.query-results-table th, 
+.query-results-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(245, 247, 250, 0.1);
+  white-space: nowrap;
+}
+
+.query-results-table th {
+  background: rgba(0, 131, 168, 0.2);
+  color: var(--teal);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.query-results-table tr:hover td {
+  background: rgba(124, 219, 70, 0.1);
+}
+
+/* Media queries for responsiveness */
+@media (max-width: 768px) {
+  .kql-toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .toolbar-item {
+    width: 100%;
+  }
+  
+  .kql-actions {
+    flex-direction: column;
+  }
+}
