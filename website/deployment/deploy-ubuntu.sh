@@ -250,20 +250,48 @@ setup_application() {
     # Clone repo using HTTPS without authentication (public repo)
     print_message $BLUE "Downloading from GitHub..."
     if [[ -d ".git" ]]; then
-        git pull
-    else
-        # Use https without credentials to avoid authentication prompt
-        git clone https://github.com/ClarityXDR/prod.git . --depth 1
+        print_message $BLUE "Updating existing repository..."
+        git pull origin main || {
+            print_message $YELLOW "Git pull failed, removing and re-cloning..."
+            cd /opt
+            rm -rf clarityxdr
+            mkdir -p clarityxdr
+            cd clarityxdr
+        }
     fi
     
-    # If git clone fails, try downloading the zip file
-    if [ $? -ne 0 ]; then
-        print_message $YELLOW "Git clone failed, trying direct download..."
-        apt-get install -y -qq wget unzip
-        wget -q https://github.com/ClarityXDR/prod/archive/refs/heads/main.zip -O /tmp/clarityxdr.zip
-        unzip -q /tmp/clarityxdr.zip -d /tmp
-        cp -r /tmp/prod-main/* .
-        rm -rf /tmp/clarityxdr.zip /tmp/prod-main
+    # Clone the public repository without authentication
+    if [[ ! -d ".git" ]]; then
+        print_message $BLUE "Cloning repository..."
+        # Use the correct public repository URL
+        git clone https://github.com/ClarityXDR/prod.git . --depth 1 --no-single-branch 2>/dev/null || {
+            print_message $YELLOW "Git clone failed, trying alternative method..."
+            # Try with explicit branch
+            git clone -b main https://github.com/ClarityXDR/prod.git . --depth 1 2>/dev/null || {
+                print_message $YELLOW "Git still failing, downloading zip file..."
+                # Install wget and unzip if not present
+                apt-get install -y -qq wget unzip
+                # Download the main branch as zip
+                wget -q https://github.com/ClarityXDR/prod/archive/refs/heads/main.zip -O /tmp/clarityxdr.zip
+                unzip -q /tmp/clarityxdr.zip -d /tmp
+                # Copy contents from the extracted folder
+                cp -r /tmp/prod-main/* . 2>/dev/null || cp -r /tmp/ClarityXDR-prod-main/* . 2>/dev/null || {
+                    print_message $RED "Failed to extract repository contents"
+                    ls -la /tmp/
+                    exit 1
+                }
+                rm -rf /tmp/clarityxdr.zip /tmp/prod-main /tmp/ClarityXDR-prod-main
+                print_message $GREEN "Repository downloaded via zip file"
+            }
+        }
+    fi
+    
+    # Verify we have the website directory
+    if [[ ! -d "website" ]]; then
+        print_message $RED "Website directory not found in repository!"
+        print_message $BLUE "Available directories:"
+        ls -la
+        exit 1
     fi
     
     cd website
@@ -367,17 +395,6 @@ EOF
 }
 
 main() {
-    print_banner
-    check_prerequisites
-    install_packages
-    collect_configuration
-    setup_application
-    start_services
-    display_results
-}
-
-# Run main function
-main "$@"
     print_banner
     check_prerequisites
     install_packages
