@@ -240,17 +240,6 @@ collect_configuration() {
     echo -n "Enter OpenAI API Key (optional, press Enter to skip): "
     read -r OPENAI_API_KEY < /dev/tty
     
-    # Optional Azure credentials for Logic App deployment
-    echo ""
-    echo "Azure credentials for Logic App deployment (optional, press Enter to skip each):"
-    echo -n "Azure Tenant ID: "
-    read -r AZURE_TENANT_ID < /dev/tty
-    echo -n "Azure Client ID: "
-    read -r AZURE_CLIENT_ID < /dev/tty
-    echo -n "Azure Client Secret: "
-    read -rs AZURE_CLIENT_SECRET < /dev/tty
-    echo ""
-    
     print_message $GREEN "Configuration completed"
 }
 
@@ -264,21 +253,34 @@ setup_application() {
     # Clone or update repository
     if [[ -d ".git" ]]; then
         print_message $BLUE "Updating existing repository..."
-        git fetch --all
+        # Configure git to not prompt for credentials
+        git config --global credential.helper 'cache --timeout=3600'
+        git config --global http.postBuffer 524288000
+        
+        # Reset to clean state and pull
+        git fetch --all --no-tags --prune || {
+            print_message $YELLOW "Fetch failed, trying to reset remote URL..."
+            git remote set-url origin "https://github.com/ClarityXDR/prod.git"
+            git fetch --all --no-tags --prune
+        }
         git reset --hard origin/main
     else
         print_message $BLUE "Cloning repository..."
         # Try multiple methods to ensure success
-        if ! git clone https://github.com/ClarityXDR/prod.git . --depth 1; then
+        if ! git clone "https://github.com/ClarityXDR/prod.git" . --depth 1 --single-branch --branch main; then
             print_message $YELLOW "Git clone failed, trying alternative method..."
             rm -rf "$INSTALL_DIR"/*
             mkdir -p "$INSTALL_DIR"
             cd "$INSTALL_DIR"
             
             # Download as archive
-            curl -L https://github.com/ClarityXDR/prod/archive/refs/heads/main.tar.gz -o clarityxdr.tar.gz
-            tar -xzf clarityxdr.tar.gz --strip-components=1
-            rm clarityxdr.tar.gz
+            if curl -L https://github.com/ClarityXDR/prod/archive/refs/heads/main.tar.gz -o clarityxdr.tar.gz; then
+                tar -xzf clarityxdr.tar.gz --strip-components=1
+                rm clarityxdr.tar.gz
+            else
+                print_message $RED "Failed to download repository. Please check your internet connection."
+                exit 1
+            fi
         fi
     fi
     
@@ -325,11 +327,6 @@ OPENAI_API_KEY=$OPENAI_API_KEY
 AZURE_OPENAI_ENDPOINT=
 AZURE_OPENAI_API_KEY=
 AZURE_OPENAI_DEPLOYMENT=
-
-# Azure Configuration for Logic App Deployment
-AZURE_TENANT_ID=$AZURE_TENANT_ID
-AZURE_CLIENT_ID=$AZURE_CLIENT_ID
-AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET
 
 # KQL Configuration
 KQL_TIMEOUT=60
@@ -518,6 +515,37 @@ EOF
     print_message $GREEN "Configuration backed up to $backup_dir"
 }
 
+cleanup_on_error() {
+    print_message $RED "Installation failed. Check $LOG_FILE for details."
+    print_message $YELLOW "To retry, run: sudo $0"
+    exit 1
+}
+
+main() {
+    # Set up error handling
+    trap cleanup_on_error ERR
+    
+    # Initialize log file
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
+    chmod 640 "$LOG_FILE"
+    
+    # Run installation steps
+    print_banner
+    check_prerequisites
+    install_packages
+    collect_configuration
+    setup_application
+    configure_firewall
+    start_services
+    create_systemd_service
+    display_results
+    
+    log "Installation completed successfully"
+}
+
+# Run main function
+main "$@"
 cleanup_on_error() {
     print_message $RED "Installation failed. Check $LOG_FILE for details."
     print_message $YELLOW "To retry, run: sudo $0"

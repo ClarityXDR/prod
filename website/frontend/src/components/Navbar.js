@@ -32,6 +32,17 @@ const Navbar = () => {
         <Link to="/rules" className={isActive('/rules')}>MDE Rules</Link>
         <Link to="/features" className={isActive('/features')}>Features</Link>
         <Link to="/contact" className={isActive('/contact')}>Contact</Link>
+        <div className="dropdown">
+          <button className="dropbtn">Admin</button>
+          <div className="dropdown-content">
+            <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
+            <Link to="/deployments" className={isActive('/deployments')}>Deployments</Link>
+            <Link to="/agents" className={isActive('/agents')}>AI Agents</Link>
+            <Link to="/clients" className={isActive('/clients')}>Clients</Link>
+            <div className="divider"></div>
+            <Link to="/github-issues" className={isActive('/github-issues')}>GitHub Issues</Link>
+          </div>
+        </div>
       </div>
     </nav>
   );

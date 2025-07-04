@@ -18,6 +18,7 @@ const QueryResultsPage = lazy(() => import('./pages/QueryResultsPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const GitHubIssuesPage = lazy(() => import('./pages/GitHubIssuesPage'));
 const GitHubIssueDetailPage = lazy(() => import('./pages/GitHubIssueDetailPage'));
+const DeploymentDashboard = lazy(() => import('./pages/DeploymentDashboard'));
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/query-results/:queryId" element={<QueryResultsPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/deployments" element={<DeploymentDashboard />} />
         </Routes>
       </Suspense>
     </div>
