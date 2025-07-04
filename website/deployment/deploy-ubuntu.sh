@@ -214,8 +214,17 @@ EOF
 
 collect_configuration() {
     print_message $BLUE "Configuration setup..."
-    echo ""
     
+    # Generate secure values first before prompting user
+    print_message $BLUE "Generating secure passwords..."
+    POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    ENCRYPTION_KEY=$(openssl rand -base64 24 | tr -d "=+/")
+    JWT_SECRET=$(openssl rand -base64 32 | tr -d "=+/")
+    TRAEFIK_ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/")
+    TRAEFIK_DASHBOARD_AUTH=$(htpasswd -nb admin "$TRAEFIK_ADMIN_PASSWORD")
+    
+    echo ""
     # Simple domain input
     echo -n "Enter your domain name (e.g., portal.clarityxdr.com): "
     read DOMAIN_NAME
@@ -228,15 +237,6 @@ collect_configuration() {
     echo -n "Enter OpenAI API Key (optional, press Enter to skip): "
     read OPENAI_API_KEY
     
-    # Generate secure values
-    print_message $BLUE "Generating secure passwords..."
-    POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
-    REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
-    ENCRYPTION_KEY=$(openssl rand -base64 24 | tr -d "=+/")
-    JWT_SECRET=$(openssl rand -base64 32 | tr -d "=+/")
-    TRAEFIK_ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/")
-    TRAEFIK_DASHBOARD_AUTH=$(htpasswd -nb admin "$TRAEFIK_ADMIN_PASSWORD")
-    
     print_message $GREEN "Configuration completed"
 }
 
@@ -247,12 +247,23 @@ setup_application() {
     mkdir -p /opt/clarityxdr
     cd /opt/clarityxdr
     
-    # Clone repo
+    # Clone repo using HTTPS without authentication (public repo)
     print_message $BLUE "Downloading from GitHub..."
     if [[ -d ".git" ]]; then
         git pull
     else
-        git clone https://github.com/ClarityXDR/prod.git .
+        # Use https without credentials to avoid authentication prompt
+        git clone https://github.com/ClarityXDR/prod.git . --depth 1
+    fi
+    
+    # If git clone fails, try downloading the zip file
+    if [ $? -ne 0 ]; then
+        print_message $YELLOW "Git clone failed, trying direct download..."
+        apt-get install -y -qq wget unzip
+        wget -q https://github.com/ClarityXDR/prod/archive/refs/heads/main.zip -O /tmp/clarityxdr.zip
+        unzip -q /tmp/clarityxdr.zip -d /tmp
+        cp -r /tmp/prod-main/* .
+        rm -rf /tmp/clarityxdr.zip /tmp/prod-main
     fi
     
     cd website
@@ -367,17 +378,6 @@ main() {
 
 # Run main function
 main "$@"
-- Password: $POSTGRES_PASSWORD
-
-Redis:
-- Password: $REDIS_PASSWORD
-EOF
-    
-    chmod 600 /opt/clarityxdr/CREDENTIALS.txt
-    print_message $GREEN "Credentials saved to /opt/clarityxdr/CREDENTIALS.txt"
-}
-
-main() {
     print_banner
     check_prerequisites
     install_packages
