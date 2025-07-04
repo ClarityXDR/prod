@@ -103,18 +103,64 @@ install_packages() {
         dpkg --get-selections | grep hold | awk '{print $1}' | xargs apt-mark unhold
     fi
     
-    # Try with a specific docker package instead of docker.io
-    print_message $BLUE "Installing Docker directly via official script..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    rm get-docker.sh
+    # Install Docker - check if already installed first
+    if command -v docker &> /dev/null; then
+        print_message $GREEN "Docker already installed"
+        docker --version
+    else
+        print_message $BLUE "Installing Docker via apt..."
+        if apt-get install -y -qq docker.io; then
+            print_message $GREEN "Docker installed via apt"
+        else
+            print_message $YELLOW "Apt failed, trying official Docker script..."
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            # Run script non-interactively by piping 'yes' to it
+            yes | sh get-docker.sh || sh get-docker.sh
+            rm get-docker.sh
+        fi
+    fi
     
-    print_message $BLUE "Installing Docker Compose via pip3..."
-    apt-get install -y -qq python3-pip
-    pip3 install docker-compose
+    # Install Docker Compose
+    print_message $BLUE "Installing Docker Compose..."
+    if command -v docker-compose &> /dev/null; then
+        print_message $GREEN "Docker Compose already installed"
+        docker-compose --version
+    else
+        # Try multiple methods
+        print_message $BLUE "Trying apt installation..."
+        if apt-get install -y -qq docker-compose; then
+            print_message $GREEN "Docker Compose installed via apt"
+        else
+            print_message $YELLOW "Trying docker compose plugin..."
+            # Check if docker compose plugin is available (newer Docker versions)
+            if docker compose version &> /dev/null; then
+                print_message $GREEN "Docker Compose plugin is available"
+                # Create symlink for compatibility
+                ln -sf $(which docker) /usr/local/bin/docker-compose
+                echo '#!/bin/bash
+docker compose "$@"' > /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+            else
+                print_message $YELLOW "Trying pipx installation..."
+                # Try pipx (recommended for Ubuntu 24.04+)
+                apt-get install -y -qq pipx
+                if pipx install docker-compose; then
+                    # Add to PATH
+                    echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+                    export PATH=$PATH:~/.local/bin
+                    print_message $GREEN "Docker Compose installed via pipx"
+                else
+                    print_message $YELLOW "Using pip with system override..."
+                    apt-get install -y -qq python3-pip python3-venv
+                    # Use --break-system-packages as last resort
+                    pip3 install --break-system-packages docker-compose
+                fi
+            fi
+        fi
+    fi
     
     print_message $BLUE "Installing utilities..."
-    apt-get install -y -qq openssl apache2-utils
+    apt-get install -y -qq curl git openssl apache2-utils
     
     # Start Docker
     print_message $BLUE "Starting Docker service..."
@@ -131,7 +177,7 @@ install_packages() {
     print_message $BLUE "Verifying installations..."
     if command -v docker &> /dev/null; then
         docker --version
-        print_message $GREEN "Docker is installed"
+        print_message $GREEN "Docker is ready"
     else
         print_message $RED "Docker installation failed"
         exit 1
@@ -139,7 +185,7 @@ install_packages() {
     
     if command -v docker-compose &> /dev/null; then
         docker-compose --version
-        print_message $GREEN "Docker Compose is installed"
+        print_message $GREEN "Docker Compose is ready"
     else
         print_message $RED "Docker Compose installation failed"
         exit 1
