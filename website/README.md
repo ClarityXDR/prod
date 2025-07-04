@@ -27,20 +27,22 @@ ClarityXDR is an AI-driven security operations platform that transforms Microsof
 
 ### Option 1: Deploy to Ubuntu Server
 
-For a one-line deployment to your Ubuntu server:
+**One-line deployment:**
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/website/deployment/deploy-ubuntu.sh | sudo bash
 ```
 
 This one-liner will:
-1. Download and set up the application
-2. Launch an interactive prompt to configure all required environment variables
+1. Check system prerequisites and install required packages
+2. Interactively collect configuration (domain, email, API keys)
 3. Generate secure random passwords and encryption keys automatically
-4. Apply system optimizations with your confirmation
-5. Start all services with Docker Compose
+4. Download and set up the application from GitHub
+5. Apply system optimizations with your confirmation
+6. Start all services with Docker Compose
+7. Display access URLs and credentials
 
-For more control over the deployment process:
+**Manual deployment for advanced users:**
 
 ```bash
 # Create directory and download files
@@ -48,10 +50,7 @@ mkdir -p /opt/clarityxdr && cd /opt/clarityxdr
 git clone https://github.com/ClarityXDR/prod.git .
 cd website
 
-# Configure environment variables (interactive mode)
-./setup-env.sh
-
-# Or configure manually
+# Configure environment variables
 cp .env.example .env
 nano .env  # Edit with your specific values
 
@@ -197,4 +196,5 @@ ClarityXDR implements several security best practices:
 
 ## License
 
+Copyright © 2025 ClarityXDR. All rights reserved.
 Copyright © 2025 ClarityXDR. All rights reserved.
