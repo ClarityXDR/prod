@@ -1,0 +1,15 @@
+{
+  "subscriptionId": "your-azure-subscription-id",
+  "resourceGroupName": "your-resource-group-name", 
+  "location": "East US",
+  "adminEmail": "admin@yourcompany.com",
+  "securityEmail": "security@yourcompany.com", 
+  "securityTeamEmail": "securityteam@yourcompany.com",
+  "companyName": "Your Company Name",
+  "companyDomain": "yourcompany.com",
+  "teamsChannelId": "19:your-actual-teams-channel-id@thread.tacv2",
+  "sentinelWorkspaceId": "your-sentinel-workspace-id",
+  "logAnalyticsWorkspaceId": "your-log-analytics-workspace-id",
+  "keyVaultName": "your-key-vault-name",
+  "managedIdentityClientId": "your-managed-identity-client-id"
+}

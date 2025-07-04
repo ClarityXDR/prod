@@ -19,91 +19,193 @@
             }
         },
         "actions": {
-            "For_each_IP": {
-                "foreach": "@body('Entities_-_Get_IPs')?['IPs']",
+            "HTTP_Check_License_Validity": {
+                "runAfter": {},
+                "type": "Http",
+                "inputs": {
+                    "method": "GET",
+                    "uri": "@{parameters('LicenseAPIEndpoint')}/licensing/validate",
+                    "headers": {
+                        "x-license-key": "@{parameters('LicenseGUID')}",
+                        "x-client-id": "@{parameters('ClientID')}",
+                        "x-product-name": "ClarityXDR"
+                    },
+                    "retryPolicy": {
+                        "type": "exponential",
+                        "count": 3,
+                        "interval": "PT5S"
+                    }
+                },
+                "description": "Validates the license against the centralized licensing system"
+            },
+            "Parse_License_Response": {
+                "runAfter": {
+                    "HTTP_Check_License_Validity": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('HTTP_Check_License_Validity')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "valid": {
+                                "type": "boolean"
+                            },
+                            "expirationDate": {
+                                "type": "string"
+                            },
+                            "features": {
+                                "type": "array"
+                            },
+                            "message": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "Check_If_License_Valid": {
+                "runAfter": {
+                    "Parse_License_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@body('Parse_License_Response')?['valid']",
+                                true
+                            ]
+                        }
+                    ]
+                },
                 "actions": {
-                    "HTTP_Query_Criminal_IP": {
-                        "type": "Http",
-                        "inputs": {
-                            "uri": "https://api.criminalip.io/v1/asset/ip/report/summary?ip=@{items('For_each_IP')}",
-                            "method": "GET",
-                            "headers": {
-                                "x-api-key": "@{parameters('CriminalIPApiKey')}"
-                            }
-                        }
-                    },
-                    "Parse_Criminal_IP_Response": {
-                        "runAfter": {
-                            "HTTP_Query_Criminal_IP": [
-                                "Succeeded"
-                            ]
-                        },
-                        "type": "ParseJson",
-                        "inputs": {
-                            "content": "@body('HTTP_Query_Criminal_IP')",
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "status": {
-                                        "type": "string"
-                                    },
-                                    "data": {
-                                        "type": "object"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "Create_HTML_Table_for_Incident_Comment": {
-                        "runAfter": {
-                            "Parse_Criminal_IP_Response": [
-                                "Succeeded"
-                            ]
-                        },
-                        "type": "Compose",
-                        "inputs": "<table border=1><tr><th>IP</th><th>Risk Score</th><th>Country</th><th>ISP</th><th>Last Seen</th></tr><tr><td></td><td>@{body('Parse_Criminal_IP_Response')?['data']?['score']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['country_name']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['isp']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['updated_at']}</td></tr></table>"
-                    },
-                    "Add_comment_to_incident_(V3)": {
-                        "runAfter": {
-                            "Create_HTML_Table_for_Incident_Comment": [
-                                "Succeeded"
-                            ]
-                        },
+                    "Entities_-_Get_IPs": {
+                        "runAfter": {},
                         "type": "ApiConnection",
                         "inputs": {
                             "host": {
                                 "connection": {
-                                    "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
                                 }
                             },
                             "method": "post",
-                            "body": {
-                                "incidentArmId": "@triggerBody()?['object']?['id']",
-                                "message": "<p>@{outputs('Create_HTML_Table_for_Incident_Comment')}</p>"
-                            },
-                            "path": "/Incidents/Comment"
-                        }
-                    }
-                },
-                "runAfter": {
-                    "Entities_-_Get_IPs": [
-                        "Succeeded"
-                    ]
-                },
-                "type": "Foreach"
-            },
-            "Entities_-_Get_IPs": {
-                "runAfter": {},
-                "type": "ApiConnection",
-                "inputs": {
-                    "host": {
-                        "connection": {
-                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                            "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                            "path": "/entities/ip"
                         }
                     },
-                    "method": "post",
-                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
-                    "path": "/entities/ip"
+                    "For_each_IP": {
+                        "foreach": "@body('Entities_-_Get_IPs')?['IPs']",
+                        "actions": {
+                            "HTTP_Query_Criminal_IP": {
+                                "type": "Http",
+                                "inputs": {
+                                    "uri": "https://api.criminalip.io/v1/asset/ip/report/summary?ip=@{items('For_each_IP')}",
+                                    "method": "GET",
+                                    "headers": {
+                                        "x-api-key": "@{parameters('CriminalIPApiKey')}"
+                                    }
+                                }
+                            },
+                            "Parse_Criminal_IP_Response": {
+                                "runAfter": {
+                                    "HTTP_Query_Criminal_IP": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ParseJson",
+                                "inputs": {
+                                    "content": "@body('HTTP_Query_Criminal_IP')",
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {
+                                                "type": "string"
+                                            },
+                                            "data": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "Create_HTML_Table_for_Incident_Comment": {
+                                "runAfter": {
+                                    "Parse_Criminal_IP_Response": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Compose",
+                                "inputs": "<table border=1><tr><th>IP</th><th>Risk Score</th><th>Country</th><th>ISP</th><th>Last Seen</th></tr><tr><td></td><td>@{body('Parse_Criminal_IP_Response')?['data']?['score']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['country_name']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['isp']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['updated_at']}</td></tr></table>"
+                            },
+                            "Add_comment_to_incident_(V3)": {
+                                "runAfter": {
+                                    "Create_HTML_Table_for_Incident_Comment": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                                        "message": "<p>@{outputs('Create_HTML_Table_for_Incident_Comment')}</p>"
+                                    },
+                                    "path": "/Incidents/Comment"
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Entities_-_Get_IPs": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Foreach"
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Add_License_Invalid_Comment": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                    "message": "<p>⚠️ <strong>LICENSE ERROR:</strong> This playbook could not run because the license is invalid or expired. Please contact your ClarityXDR representative.</p><p>Error: @{body('Parse_License_Response')?['message']}</p>"
+                                },
+                                "path": "/Incidents/Comment"
+                            }
+                        },
+                        "Terminate": {
+                            "runAfter": {
+                                "Add_License_Invalid_Comment": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Terminate",
+                            "inputs": {
+                                "runStatus": "Failed",
+                                "runError": {
+                                    "code": "LicenseValidationFailed",
+                                    "message": "The ClarityXDR license is invalid or has expired. Please contact support."
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -113,13 +215,26 @@
                 "defaultValue": "",
                 "type": "String"
             },
-            "LogAnalyticsWorkspaceId": {
-                "defaultValue": "",
-                "type": "String"
+            "LicenseGUID": {
+                "type": "String",
+                "defaultValue": "00000000-0000-0000-0000-000000000000",
+                "metadata": {
+                    "description": "License identifier for this ClarityXDR installation"
+                }
             },
-            "TableName": {
-                "defaultValue": "CriminalIPData",
-                "type": "String"
+            "ClientID": {
+                "type": "String",
+                "defaultValue": "00000000-0000-0000-0000-000000000000",
+                "metadata": {
+                    "description": "Unique identifier for this client"
+                }
+            },
+            "LicenseAPIEndpoint": {
+                "type": "String",
+                "defaultValue": "https://api.clarityxdr.com/api",
+                "metadata": {
+                    "description": "API endpoint for license validation"
+                }
             },
             "$connections": {
                 "type": "Object",

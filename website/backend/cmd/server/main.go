@@ -11,7 +11,9 @@ import (
 
 	"github.com/ClarityXDR/backend/internal/db"
 	"github.com/ClarityXDR/backend/internal/handlers"
+	"github.com/ClarityXDR/backend/internal/middleware"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 func main() {
@@ -27,25 +29,34 @@ func main() {
 	// Create router and set up routes
 	r := mux.NewRouter()
 
-	// Add CORS middleware
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// Add security middleware
+	r.Use(middleware.SecurityHeadersMiddleware)
+	r.Use(middleware.RateLimitMiddleware)
+	r.Use(middleware.LoggingMiddleware)
 
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
+	// Configure CORS properly
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{
+			os.Getenv("FRONTEND_URL"),
+			"https://" + os.Getenv("DOMAIN_NAME"),
+			"https://api." + os.Getenv("DOMAIN_NAME"),
+		},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Requested-With"},
+		ExposedHeaders:   []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           86400,
 	})
 
-	// API routes
+	// API routes with authentication
 	apiRouter := r.PathPrefix("/api").Subrouter()
+	apiRouter.Use(middleware.AuthMiddleware)
+
+	// Register handlers
 	handlers.RegisterRoutes(apiRouter, database)
+
+	// License validation endpoint (no auth required for Logic Apps)
+	r.HandleFunc("/api/licensing/validate", handlers.NewLicenseHandler(database).ValidateLicense).Methods("GET")
 
 	// Health check endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -60,13 +71,16 @@ func main() {
 		r.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
 	}
 
-	// Create HTTP server
+	// Apply CORS
+	handler := c.Handler(r)
+
+	// Create HTTP server with timeouts
 	srv := &http.Server{
 		Addr:         ":8080",
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
-		Handler:      r,
+		Handler:      handler,
 	}
 
 	// Start the server in a goroutine
