@@ -27,6 +27,7 @@ const Navbar = () => {
         <Link to="/dashboard" className={isActive('/dashboard')}>Dashboard</Link>
         <Link to="/agents" className={isActive('/agents')}>AI Agents</Link>
         <Link to="/kql" className={isActive('/kql')}>KQL Interface</Link>
+        <Link to="/github-issues" className={isActive('/github-issues')}>GitHub Issues</Link>
         <Link to="/clients" className={isActive('/clients')}>Clients</Link>
         <Link to="/rules" className={isActive('/rules')}>MDE Rules</Link>
         <Link to="/features" className={isActive('/features')}>Features</Link>

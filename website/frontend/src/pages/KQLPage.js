@@ -32,12 +32,12 @@ const KQLPage = () => {
   const fetchClients = async () => {
     try {
       const response = await axios.get('/api/clients');
-      setClients(response.data);
+      setClients(response.data || []);
       
       // If clientId was passed in URL params, verify it exists
-      if (clientId && response.data.some(client => client.id === clientId)) {
+      if (clientId && response.data && response.data.some(client => client.id === clientId)) {
         setSelectedClient(clientId);
-      } else if (response.data.length > 0) {
+      } else if (response.data && response.data.length > 0) {
         setSelectedClient(response.data[0].id);
       }
     } catch (err) {
@@ -49,7 +49,7 @@ const KQLPage = () => {
   const fetchQueryTemplates = async () => {
     try {
       const response = await axios.get('/api/kql/templates');
-      setTemplates(response.data);
+      setTemplates(response.data || []);
     } catch (err) {
       console.error('Error fetching query templates:', err);
     }
@@ -58,7 +58,7 @@ const KQLPage = () => {
   const loadTemplateQuery = async (templateId) => {
     try {
       const response = await axios.get(`/api/kql/templates/${templateId}`);
-      setQuery(response.data.query_text);
+      setQuery(response.data.query_text || '');
     } catch (err) {
       setError('Failed to load template. Please try again.');
       console.error('Error loading template:', err);
@@ -125,24 +125,26 @@ const KQLPage = () => {
     return (
       <div className="query-results-table">
         <div className="results-meta">
-          <p>Found {table.rows.length} results in {results.execution_time_ms}ms</p>
+          <p>Found {table.rows ? table.rows.length : 0} results in {results.execution_time_ms || 0}ms</p>
         </div>
         <table>
           <thead>
             <tr>
-              {table.columns.map((col, index) => (
-                <th key={index}>{col.name}</th>
+              {table.columns && table.columns.map((col, index) => (
+                <th key={index}>{col.name || `Column ${index + 1}`}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, rowIndex) => (
+            {table.rows && table.rows.map((row, rowIndex) => (
               <tr key={rowIndex}>
-                {row.map((cell, cellIndex) => (
+                {Array.isArray(row) ? row.map((cell, cellIndex) => (
                   <td key={cellIndex}>{
-                    typeof cell === 'object' ? JSON.stringify(cell) : cell
+                    typeof cell === 'object' && cell !== null ? JSON.stringify(cell) : String(cell || '')
                   }</td>
-                ))}
+                )) : (
+                  <td colSpan={table.columns ? table.columns.length : 1}>Invalid row data</td>
+                )}
               </tr>
             ))}
           </tbody>

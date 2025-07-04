@@ -30,7 +30,7 @@ INSERT INTO agent_mgmt.agent_types (type_name, description) VALUES
 ('PURVIEW_GRC', 'Governance, risk management, and compliance'),
 ('ORCHESTRATOR', 'Coordinates workflow between other agents');
 
--- Agent Definitions
+-- Agent Definitions with added GitHub and MCP fields
 CREATE TABLE agent_mgmt.agents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
@@ -39,6 +39,11 @@ CREATE TABLE agent_mgmt.agents (
     capabilities JSONB,
     config JSONB,
     is_active BOOLEAN DEFAULT TRUE,
+    github_username VARCHAR(100),
+    github_repository VARCHAR(255),
+    github_labels TEXT[],
+    mcp_guidelines TEXT,
+    mcp_version VARCHAR(20) DEFAULT '1.0',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -55,11 +60,29 @@ CREATE TABLE agent_mgmt.agent_relationships (
     UNIQUE(source_agent_id, target_agent_id, relationship_type)
 );
 
+-- GitHub Issue Tracking
+CREATE TABLE agent_mgmt.github_issues (
+    id SERIAL PRIMARY KEY,
+    agent_id UUID REFERENCES agent_mgmt.agents(id),
+    issue_number INTEGER NOT NULL,
+    repository VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    labels TEXT[],
+    url VARCHAR(255),
+    last_comment_id INTEGER,
+    last_activity_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(repository, issue_number)
+);
+
 -- Agent Conversations
 CREATE TABLE agent_mgmt.conversations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(255),
     status VARCHAR(50) DEFAULT 'active',
+    github_issue_id INTEGER REFERENCES agent_mgmt.github_issues(id),
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -73,6 +96,7 @@ CREATE TABLE agent_mgmt.messages (
     receiver_agent_id UUID REFERENCES agent_mgmt.agents(id),
     content TEXT NOT NULL,
     message_type VARCHAR(50) DEFAULT 'text',
+    github_comment_id INTEGER,
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -85,6 +109,7 @@ CREATE TABLE agent_mgmt.action_logs (
     status VARCHAR(50) NOT NULL,
     details JSONB,
     result JSONB,
+    github_issue_id INTEGER REFERENCES agent_mgmt.github_issues(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

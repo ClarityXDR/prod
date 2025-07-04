@@ -15,6 +15,7 @@ ClarityXDR is an AI-driven security operations platform that transforms Microsof
 - **Custom MDE Rule Repository**: GitHub-style repositories for client-specific MDE detection rules
 - **Multi-tenant Architecture**: Each client has their own isolated environment and dedicated resources
 - **Modern React UI**: Sleek, responsive user interface with real-time visualizations
+- **GitHub Integration**: AI agents operate via GitHub Issues, with customized Mission Control Protocol (MCP) guidelines for each agent type
 
 ## Prerequisites
 
@@ -22,6 +23,7 @@ ClarityXDR is an AI-driven security operations platform that transforms Microsof
 - 4GB+ RAM, 2+ CPU cores
 - Domain name (for production deployment)
 - SSL certificates (handled automatically by Traefik)
+- GitHub account with repository access
 
 ## Deployment Options
 
@@ -162,6 +164,27 @@ ClarityXDR uses a microservices architecture with the following components:
 - **Cache**: Redis for fast data access and message queuing
 - **Proxy**: Traefik for routing, SSL termination, and load balancing
 
+## AI Agent Architecture
+
+ClarityXDR uses GitHub Issues as its primary AI agent interaction mechanism. Each agent has specific Mission Control Protocol (MCP) guidelines that govern its behavior and responses:
+
+### Agent Types and MCP Guidelines
+
+- **Executive Agents**: Make high-level decisions with strategic context and business impact awareness
+- **Security Agents**: Follow strict security protocols with data protection and compliance focus
+- **Business Agents**: Operate with customer service, sales, and marketing best practices
+- **Orchestrator Agent**: Coordinates all other agents, ensuring proper task delegation and completion
+
+Each agent automatically monitors GitHub Issues assigned to it, processes the requests according to its MCP guidelines, and posts responses back to the Issue thread. This creates a transparent, auditable trail of all AI decision-making and actions.
+
+To customize an agent's MCP guidelines:
+
+```bash
+# Edit an agent's MCP configuration
+cd /opt/clarityxdr/website
+./edit-agent-mcp.sh <agent_id>
+```
+
 ## Development
 
 ### Local Development Setup
@@ -196,5 +219,4 @@ ClarityXDR implements several security best practices:
 
 ## License
 
-Copyright © 2025 ClarityXDR. All rights reserved.
 Copyright © 2025 ClarityXDR. All rights reserved.

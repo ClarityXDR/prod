@@ -1,13 +1,13 @@
 import React from 'react';
 import './LoadingSpinner.css';
 
-const LoadingSpinner = () => {
+const LoadingSpinner = ({ size = 'medium', color = 'var(--lime)' }) => {
   return (
-    <div className="loading-spinner-container">
-      <div className="loading-spinner">
-        <div className="spinner-circle"></div>
-        <div className="spinner-circle-outer"></div>
-      </div>
+    <div className={`loading-spinner ${size}`}>
+      <div 
+        className="spinner" 
+        style={{ borderTopColor: color }}
+      ></div>
     </div>
   );
 };

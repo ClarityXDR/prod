@@ -16,6 +16,8 @@ const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'));
 const RulesPage = lazy(() => import('./pages/RulesPage'));
 const QueryResultsPage = lazy(() => import('./pages/QueryResultsPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const GitHubIssuesPage = lazy(() => import('./pages/GitHubIssuesPage'));
+const GitHubIssueDetailPage = lazy(() => import('./pages/GitHubIssueDetailPage'));
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
           <Route path="/agents/:agentId" element={<AgentDetailPage />} />
           <Route path="/kql" element={<KQLPage />} />
           <Route path="/kql/:clientId" element={<KQLPage />} />
+          <Route path="/github-issues" element={<GitHubIssuesPage />} />
+          <Route path="/github-issues/:issueId" element={<GitHubIssueDetailPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:clientId" element={<ClientDetailPage />} />
           <Route path="/rules" element={<RulesPage />} />

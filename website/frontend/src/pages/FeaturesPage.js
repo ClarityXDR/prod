@@ -35,19 +35,41 @@ const FeaturesPage = () => {
           </section>
           
           <section className="feature-section">
+            <h2>GitHub-Integrated AI Agents</h2>
+            <div className="feature-grid">
+              <div className="feature-card">
+                <h3>Mission Control Protocols</h3>
+                <p>Each AI agent operates under strict Mission Control Protocol (MCP) guidelines to ensure responsible and focused behavior.</p>
+              </div>
+              <div className="feature-card">
+                <h3>Issue-Based Workflow</h3>
+                <p>AI agents automatically monitor and respond to GitHub Issues, creating an auditable trail of all AI decision-making.</p>
+              </div>
+              <div className="feature-card">
+                <h3>Transparent Operations</h3>
+                <p>All agent activities are documented in GitHub, providing complete visibility into AI operations and decisions.</p>
+              </div>
+              <div className="feature-card">
+                <h3>Collaborative Intelligence</h3>
+                <p>Multiple specialized agents work together through GitHub's collaboration features to solve complex problems.</p>
+              </div>
+            </div>
+          </section>
+          
+          <section className="feature-section">
             <h2>Business Operations</h2>
             <div className="feature-grid">
               <div className="feature-card">
                 <h3>Automated Sales</h3>
-                <p>Our sales agent handles quotes, follows up with leads, and manages the entire sales pipeline.</p>
+                <p>Our sales agent handles quotes, follows up with leads, and manages the entire sales pipeline through GitHub Issues.</p>
               </div>
               <div className="feature-card">
                 <h3>Intelligent Invoicing</h3>
                 <p>Automatic invoice generation, payment tracking, and service management for non-payment.</p>
               </div>
               <div className="feature-card">
-                <h3>Ticketing System</h3>
-                <p>AI-managed ticketing system that categorizes, prioritizes, and resolves customer issues.</p>
+                <h3>GitHub Issues Ticketing</h3>
+                <p>AI-managed ticketing system that categorizes, prioritizes, and resolves customer issues through GitHub's native issue tracking.</p>
               </div>
               <div className="feature-card">
                 <h3>Accounting Integration</h3>

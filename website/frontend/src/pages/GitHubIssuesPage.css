@@ -1,0 +1,217 @@
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.issue-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.issue-filters button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--teal);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--teal);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.issue-filters button:hover {
+  background: rgba(0, 131, 168, 0.1);
+}
+
+.issue-filters button.active {
+  background: var(--teal);
+  color: var(--white);
+}
+
+.github-header {
+  background: rgba(10, 14, 35, 0.6);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(124, 219, 70, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.github-header p {
+  margin: 0;
+  flex: 1;
+  min-width: 250px;
+}
+
+.github-issues-container {
+  background: rgba(10, 14, 35, 0.6);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid rgba(245, 247, 250, 0.1);
+  overflow: auto;
+}
+
+.issues-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.issues-table th,
+.issues-table td {
+  padding: 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(245, 247, 250, 0.1);
+}
+
+.issues-table th {
+  background: rgba(10, 14, 35, 0.8);
+  color: var(--white);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.issues-table tr:hover td {
+  background: rgba(124, 219, 70, 0.05);
+}
+
+.issue-title {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.open {
+  background: rgba(255, 69, 0, 0.2);
+  color: var(--orange);
+  border: 1px solid var(--orange);
+}
+
+.status-badge.processing {
+  background: rgba(0, 131, 168, 0.2);
+  color: var(--teal);
+  border: 1px solid var(--teal);
+}
+
+.status-badge.completed {
+  background: rgba(124, 219, 70, 0.2);
+  color: var(--lime);
+  border: 1px solid var(--lime);
+}
+
+.issue-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  text-decoration: none;
+  border: 1px solid var(--teal);
+  color: var(--teal);
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.btn-small:hover {
+  background: rgba(0, 131, 168, 0.1);
+}
+
+.btn-small.btn-secondary {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.btn-small.btn-secondary:hover {
+  background: rgba(255, 69, 0, 0.1);
+}
+
+.no-issues {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: rgba(245, 247, 250, 0.6);
+}
+
+.error-message {
+  background-color: rgba(255, 69, 0, 0.2);
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+/* Row highlighting by status */
+.status-open {
+  border-left: 3px solid var(--orange);
+}
+
+.status-processing {
+  border-left: 3px solid var(--teal);
+}
+
+.status-completed {
+  border-left: 3px solid var(--lime);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .github-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .github-header p {
+    min-width: auto;
+  }
+  
+  .issues-table {
+    font-size: 0.8rem;
+  }
+  
+  .issue-title {
+    max-width: 200px;
+  }
+  
+  .issue-actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .github-issues-container {
+    overflow-x: auto;
+  }
+  
+  .issues-table {
+    min-width: 600px;
+  }
+}
