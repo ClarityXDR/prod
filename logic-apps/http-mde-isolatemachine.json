@@ -1,0 +1,59 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "manual": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "hostname": {
+                                "type": "string"
+                            },
+                            "machineId": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "actions": {
+            "HTTP_Isolate_Selective": {
+                "runAfter": {},
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://api.securitycenter.microsoft.com/api/machines/@{triggerBody()?['machineId']}/isolate",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": {
+                        "Comment": "Isolate machine due http trigger",
+                        "IsolationType": "Selective"
+                    },
+                    "authentication": {
+                        "audience": "https://graph.microsoft.com",
+                        "type": "ManagedServiceIdentity"
+                    }
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {}
+        }
+    }
+}

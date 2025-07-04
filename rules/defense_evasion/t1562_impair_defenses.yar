@@ -1,0 +1,28 @@
+rule: ImpairDefenses
+meta:
+  title: "Impair Defenses (T1562)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1562"]
+  severity: "high"
+  description: "Detects attempts to disable security tools or modify their configuration."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "net stop windefend"
+      - "Set-MpPreference"
+      - "Disable-WindowsOptionalFeature"
+      - "bcdedit /set"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine"]
+  entity_columns: []

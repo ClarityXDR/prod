@@ -1,0 +1,31 @@
+rule: DetectNetworkScanningActivity
+meta:
+  title: "Detect network scanning activity"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: ["T1046"]
+  severity: "medium"
+  description: "Detects network scanning on ports <1024. Replace RemotePort values to target additional known scanning ports."
+  references: []
+
+tables:
+  primary: "DeviceNetworkEvents"
+
+detection:
+  selection:
+    ActionType|equals: "Scan"
+    RemotePort|less_than: 1024
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["DeviceName", "RemoteIP"]
+  entity_columns: []

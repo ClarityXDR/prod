@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClarityXDR</title>
+  <link rel="icon" href="favicon.ico">
+  <!-- Modern tsparticles library -->
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js"></script>
+  <style>
+    /* reset */
+    body { margin:0; font:normal 75% Arial, Helvetica, sans-serif; }
+    canvas { display:block; }
+    :root {
+      --bg: #0A0E23;       /* Darkblue */
+      --teal: #0083A8;     /* Teal */
+      --lime: #7CDB46;     /* Lime Green */
+      --orange: #FF4500;   /* Blaze Orange */
+      --white: #F5F7FA;    /* Cool Light */
+      --menu: #417a4b;     /* Cadetblue */
+      --blur: 100px;
+      --sidebar-width: 100px;
+    }
+    *,*::before,*::after { box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:var(--bg); color:var(--white); font-family:'Inter', sans-serif; overflow:hidden; }
+    /* Sidebar nav */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-width);
+      background: var(--menu);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 0;
+      z-index: 200;
+    }
+    nav .logo img {
+      height: 50px;
+      margin-bottom: 2rem;
+    }
+    nav .menu {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    nav .menu a {
+      color: var(--white);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.25rem 0;
+      transition: color .3s;
+    }
+    nav .menu a:hover {
+      color: var(--orange);
+    }
+    /* particles.js container */
+    #particles-js {
+      position:absolute;
+      top:0;
+      left:var(--sidebar-width);
+      width:calc(100% - var(--sidebar-width));
+      height:100%;
+      background:var(--bg);
+      z-index:1;
+    }
+    .count-particles {
+      background:#000022;
+      position:absolute;
+      top:48px;
+      left:var(--sidebar-width);
+      width:80px;
+      color:#13E8E9;
+      font-size:.8em;
+      text-align:left;
+      text-indent:4px;
+      line-height:14px;
+      padding-bottom:2px;
+      font-family:Helvetica,Arial,sans-serif;
+      font-weight:bold;
+      z-index:201;
+    }
+    .js-count-particles { font-size:1.1em; }
+    #stats, .count-particles { -webkit-user-select:none; user-select:none; margin-top:5px; margin-left:5px; }
+    #stats { border-radius:3px 3px 0 0; overflow:hidden; }
+    .count-particles { border-radius:0 0 3px 3px; }
+    /* Hero content area */
+    .main {
+      position:absolute;
+      top:0;
+      left:var(--sidebar-width);
+      width:calc(100% - var(--sidebar-width));
+      height:100%;
+      overflow:auto;
+    }
+    .hero-wrapper {
+      position:relative;
+      z-index:2;
+      max-width:600px;
+      margin:0 auto;
+      padding:100px 1rem 1rem;
+      text-align:center;
+    }
+    .hero-logo img { height:160px; margin-bottom:1rem; }
+    .hero-title { font-size:3rem; line-height:1.2; margin:1rem 0; }
+    .hero-title .brand { color:var(--white); font-weight:bold; }
+    .hero-title .xdr { color:var(--orange); }
+    .hero-title .line1 { display:block; color:var(--lime); margin-top:.5rem; }
+    .hero-title .line2 { display:block; color:var(--orange); }
+    .hero-sub { font-size:1.1rem; line-height:1.4; max-width:80%; margin:1rem auto; opacity:.9; }
+    .hero-input {
+      margin:2rem auto 1rem;
+      max-width:400px;
+      position:relative;
+    }
+    .hero-input input {
+      width:100%; padding:1em 1.5em; border:2px solid var(--lime);
+      border-radius:50px; background:rgba(124,219,70,0.2);
+      color:var(--white); font-size:1rem;
+    }
+    .hero-input::after {
+      content:'';
+      position:absolute; inset:-14px 50%; transform:translateX(-50%);
+      width:calc(100% + 28px); height:calc(100% + 28px);
+      border-radius:60px;
+      box-shadow:0 0 30px 5px var(--lime),0 0 20px 10px var(--orange);
+      animation:pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 30px 5px var(--lime),0 0 20px 10px var(--orange);}50%{box-shadow:0 0 60px 15px var(--lime),0 0 40px 20px var(--orange);}}
+    .ctas { display:flex; gap:1rem; justify-content:center; margin:2rem 0; }
+    .btn { padding:.75em 1.5em; border:2px solid var(--lime); border-radius:30px;
+      background:transparent; color:var(--lime); font-weight:600;
+      text-decoration:none; transition:background .3s;
+    }
+    .btn-primary { background:var(--lime); color:var(--bg); }
+    .btn-secondary { border-color:var(--orange); color:var(--orange); }
+    .ticker { margin:2rem 0; font-size:.9rem; opacity:.8; }
+    footer { text-align:center; padding:1.5rem 0; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="logo"><img src="https://raw.githubusercontent.com/DataGuys/ClarityXDR/main/brand-assets/Logo_Square_Dark.png" alt="ClarityXDR Logo"></div>
+    <div class="menu">
+      <a href="#hero">Home</a>
+      <a href="#features">Features</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </nav>
+  <div id="particles-js"></div>
+  <div class="count-particles"><span class="js-count-particles">--</span> particles</div>
+  <div class="main" id="hero">
+    <div class="hero-wrapper">
+      <div class="hero-logo"><img src="https://raw.githubusercontent.com/DataGuys/ClarityXDR/main/brand-assets/Icon_512x512.png" alt="ClarityXDR Logo"></div>
+      <div class="hero-title">
+        <span class="brand">Clarity</span><span class="xdr">XDR</span>
+        <span class="line1">Architected by Humans</span>
+        <span class="line2">Operated by AI and ML</span>
+      </div>
+      <div class="hero-sub">
+        Have a moment of clarity.
+      </div>
+      <div class="hero-input"><input type="text" placeholder="Ask your security question..."></div>
+      <div class="ctas"><a class="btn btn-secondary" href="#">Explore Demo</a><a class="btn btn-primary" href="#">Get Started</a></div>
+      <div class="ticker">Threats analyzed this hour: <span id="threat-count">1,542</span></div>
+    </div>
+    <footer>&copy; 2025 ClarityXDR. All rights reserved.</footer>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded',function(){
+      /* Modern tsparticles */
+      tsParticles.load("particles-js", {
+        background: {
+          color: {
+            value: "transparent",
+          },
+        },
+        fpsLimit: 120,
+        interactivity: {
+          events: {
+            onClick: {
+              enable: true,
+              mode: "push",
+            },
+            onHover: {
+              enable: true,
+              mode: "repulse",
+            },
+            resize: true,
+          },
+          modes: {
+            push: {
+              quantity: 4,
+            },
+            repulse: {
+              distance: 200,
+              duration: 0.4,
+            },
+          },
+        },
+        particles: {
+          color: {
+            value: "#7CDB46",
+          },
+          links: {
+            color: "#7CDB46",
+            distance: 150,
+            enable: true,
+            opacity: 0.5,
+            width: 1,
+          },
+          collisions: {
+            enable: true,
+          },
+          move: {
+            direction: "none",
+            enable: true,
+            outModes: {
+              default: "bounce",
+            },
+            random: false,
+            speed: 2,
+            straight: false,
+          },
+          number: {
+            density: {
+              enable: true,
+              area: 800,
+            },
+            value: 80,
+          },
+          opacity: {
+            value: 0.5,
+          },
+          shape: {
+            type: "circle",
+          },
+          size: {
+            value: { min: 1, max: 5 },
+          },
+        },
+        detectRetina: true,
+      });
+      /* stats.js */
+      if(typeof Stats==='function'){const stats=new Stats();stats.setMode(0);stats.domElement.style.position='absolute';stats.domElement.style.left='0px';stats.domElement.style.top='0px';document.body.appendChild(stats.domElement);const count_particles=document.querySelector('.js-count-particles');(function update(){stats.begin();stats.end();if(window.pJSDom&&window.pJSDom[0].pJS.particles.array)count_particles.innerText=window.pJSDom[0].pJS.particles.array.length;requestAnimationFrame(update);})();}
+      /* ticker */
+      const el=document.getElementById('threat-count');let val=parseInt(el.textContent.replace(/,/g,''),10);(function inc(){setTimeout(()=>{val+=Math.ceil(Math.random()*5);el.textContent=val.toLocaleString();inc();},800+Math.random()*1200);}());
+    });
+  </script>
+</body>
+</html>

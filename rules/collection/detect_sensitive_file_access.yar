@@ -1,0 +1,36 @@
+rule: DetectSensitiveFileAccess
+meta:
+  title: "Detect sensitive file access"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: []
+  severity: "medium"
+  description: "Detects access to sensitive file types in Documents or Finance folders. Update file types and paths as needed."
+  references: []
+
+tables:
+  primary: "DeviceFileEvents"
+
+detection:
+  selection:
+    FileName|endswith:
+      - ".docx"
+      - ".xlsx"
+      - ".pdf"
+    FolderPath|contains:
+      - "Documents"
+      - "Finance"
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["Timestamp", "DeviceName", "FileName", "FolderPath", "InitiatingProcessAccountName"]
+  entity_columns: []

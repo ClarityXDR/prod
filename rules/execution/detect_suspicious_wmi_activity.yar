@@ -1,0 +1,31 @@
+rule: DetectSuspiciousWMIActivity
+meta:
+  title: "Detect suspicious WMI activity"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: []
+  severity: "medium"
+  description: "Detects suspicious use of WMIC. Modify for specific WMI commands if needed."
+  references: []
+
+tables:
+  primary: "DeviceProcessEvents"
+
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "wmic"
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["DeviceName", "ProcessCommandLine", "Timestamp"]
+  entity_columns: []

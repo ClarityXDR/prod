@@ -1,0 +1,25 @@
+rule: BruteForceLogonAttempts
+meta:
+  title: "Brute Force Logon Attempts (T1110)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1110"]
+  severity: "high"
+  description: "Detects multiple failed logon attempts from the same account or IP."
+tables:
+  primary: "DeviceLogonEvents"
+detection:
+  selection:
+    LogonType|==: "RemoteInteractive"
+    ActionType|==: "LogonFailed"
+  filter: {}
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "AccountName", "RemoteIP"]
+  entity_columns: []

@@ -1,0 +1,5 @@
+{
+    "azureResourceManagerTools.parameterFiles": {
+        "azuredeploy.json": "azuredeploy.parameters.json"
+    }
+}

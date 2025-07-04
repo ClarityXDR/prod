@@ -1,0 +1,33 @@
+rule: BootOrLogonAutostartExecution
+meta:
+  title: "Boot or Logon Autostart Execution (T1547)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1547"]
+  severity: "medium"
+  description: "Detects persistence via registry Run keys or startup folder."
+tables:
+  primary: "DeviceRegistryEvents"
+detection:
+  selection:
+    RegistryKey|contains:
+      - "\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+kql:
+  query: |
+    DeviceRegistryEvents
+    | where RegistryKey has_any ("\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce")
+    | project TimeGenerated, DeviceId, DeviceName, RegistryKey, RegistryValueName, RegistryValueData, InitiatingProcessFileName, InitiatingProcessCommandLine
+  syntax: KQL
+
+output:
+  required_columns: ["Timestamp", "DeviceName", "RegistryKey", "RegistryValueName"]
+  entity_columns: []

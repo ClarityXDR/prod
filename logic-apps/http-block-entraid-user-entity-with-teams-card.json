@@ -1,0 +1,218 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_entity": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/entity/@{encodeURIComponent('Account')}"
+                }
+            }
+        },
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "Condition_-_if_user_have_manager": {
+                        "actions": {
+                            "Condition_2": {
+                                "actions": {
+                                    "Add_comment_to_incident_-_with_manager_-_no_admin": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                                "message": "<p>User @{triggerBody()?['Entity']?['properties']?['Name']} &nbsp;(UPN - ) was disabled in AAD via playbook Block-AADUser. Manager () is notified.</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        }
+                                    }
+                                },
+                                "else": {
+                                    "actions": {}
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "not": {
+                                                "equals": [
+                                                    "@triggerBody()?['IncidentArmID']",
+                                                    "@null"
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                },
+                                "type": "If"
+                            }
+                        },
+                        "runAfter": {
+                            "Get_manager_(V2)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {
+                                "Condition_3": {
+                                    "actions": {
+                                        "Add_comment_to_incident_-_no_manager_-_no_admin": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                                    "message": "<p class=\"editor-paragraph\">User @{triggerBody()?['Entity']?['properties']?['Name']} (UPN - ) was disabled in AAD via playbook Block-AADUser. Manager has not been notified, since it is not found for this user.</p>"
+                                                },
+                                                "path": "/Incidents/Comment"
+                                            }
+                                        }
+                                    },
+                                    "else": {
+                                        "actions": {}
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "not": {
+                                                    "equals": [
+                                                        "@triggerBody()?['IncidentArmID']",
+                                                        "@null"
+                                                    ]
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            }
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@body('Get_manager_(V2)')?['mail']",
+                                            "@null"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    },
+                    "Get_user_profile_(V2)": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365users']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/codeless/v1.0/users/@{encodeURIComponent(triggerBody()?['Entity']?['properties']?['AadUserId'])}"
+                        }
+                    },
+                    "Get_manager_(V2)": {
+                        "runAfter": {
+                            "Get_user_profile_(V2)": [
+                                "Succeeded",
+                                "Failed"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365users']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/codeless/v1.0/users/@{encodeURIComponent(body('Get_user_profile_(V2)')?['id'])}/manager"
+                        }
+                    }
+                },
+                "runAfter": {},
+                "else": {
+                    "actions": {
+                        "Add_comment_to_incident_-_error_details": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['microsoftsentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                    "message": "<p>Block-AADUser playbook could not disable user @{triggerBody()?['Entity']?['properties']?['Name']}.<br>\nError message: <br>\nNote: If user is admin, this playbook don't have privilages to block admin users!</p>"
+                                },
+                                "path": "/Incidents/Comment"
+                            }
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@triggerBody()?['Entity']?['properties']?['AadUserId']",
+                                    "@null"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "type": "If"
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "microsoftsentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "microsoftsentinel-HTTP-Block-EntraID-User-Entity",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "office365users": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365users",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "office365users"
+                }
+            }
+        }
+    }
+}

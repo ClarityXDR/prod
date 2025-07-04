@@ -1,0 +1,32 @@
+SigninLogs
+| where Status !has 'satisfied'
+| where ResultType == '0'
+| where IncomingTokenType == 'none'
+| where MfaDetail contains "Phone"
+| project 
+    TimeGenerated,
+    UserPrincipalName,
+    UserDisplayName,
+    UserId,
+    UserType,
+    AppDisplayName,
+    AppId,
+    ClientAppUsed,
+    DeviceDetail_displayName = DeviceDetail.displayName,
+    DeviceDetail_operatingSystem = DeviceDetail.operatingSystem,
+    DeviceDetail_browser = DeviceDetail.browser,
+    Location_city = Location.city,
+    Location_state = Location.state,
+    Location_countryOrRegion = Location.countryOrRegion,
+    IPAddress,
+    ResultType,
+    ResultDescription,
+    Status,
+    MfaDetail,
+    AuthenticationDetails,
+    ConditionalAccessStatus,
+    IsInteractive,
+    RiskState,
+    RiskLevelDuringSignIn,
+    RiskLevelAggregated
+| sort by TimeGenerated desc

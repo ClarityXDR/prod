@@ -1,0 +1,47 @@
+// Detect malicious credential cache usage
+let timeframe = 24h;
+// Look for credential cache file operations
+DeviceFileEvents
+| where Timestamp > ago(timeframe)
+| where FileName endswith ".ccache" 
+    or FileName endswith ".kirbi" 
+    or FileName contains "krb5cc_" 
+    or FileName contains "kerberos_ccache"
+| where ActionType in ("FileCreated", "FileModified", "FileRenamed")
+| project 
+    Timestamp, 
+    DeviceId, 
+    DeviceName, 
+    FileName, 
+    FolderPath, 
+    AccountName, 
+    ActionType
+| union (
+    // Look for process events related to ccache manipulation
+    DeviceProcessEvents
+    | where Timestamp > ago(timeframe)
+    | where ProcessCommandLine has_any("ccache", "credential cache", "krb5cc", "ticket.kirbi", 
+                                      "kerberos::ptt", "KRB5CCNAME", "export")
+        and ProcessCommandLine has_any("copy", "dump", "extract", "save", "export", "harvest")
+    | project 
+        Timestamp, 
+        DeviceId, 
+        DeviceName, 
+        ProcessCommandLine, 
+        FileName, 
+        AccountName
+)
+| union (
+    // Look for known ccache manipulation tools
+    DeviceProcessEvents
+    | where Timestamp > ago(timeframe)
+    | where FileName in~ ("ticketer.py", "impacket-ticketer", "mimikatz.exe", "Rubeus.exe")
+        or ProcessCommandLine has_any("kerberos::", "asktgt", "klist")
+    | project 
+        Timestamp, 
+        DeviceId, 
+        DeviceName, 
+        ProcessCommandLine, 
+        FileName, 
+        AccountName
+)

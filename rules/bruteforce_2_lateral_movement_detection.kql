@@ -1,0 +1,106 @@
+// Complete Attack Story: Brute Force to Lateral Movement Detection
+let lookback = 180d;
+let bruteforce_threshold = 3; // Lowered from 1 to 3 for more realistic detection
+let lateral_threshold = 2; // Increased from 1 to 2 for meaningful lateral movement
+
+// Step 1: Identify brute force attempts
+let BruteForceAttempts = DeviceLogonEvents
+| where Timestamp > ago(lookback)
+| where ActionType == "LogonFailed"
+| summarize 
+    FailedAttempts = count(),
+    FailedDevices = make_set(DeviceName, 50),
+    FirstFailure = min(Timestamp),
+    LastFailure = max(Timestamp),
+    FailureReasons = make_set(FailureReason, 10)
+    by AccountName, RemoteIP
+| where FailedAttempts >= bruteforce_threshold;
+
+// Debug: Show brute force attempts found
+// BruteForceAttempts | take 10;
+
+// Step 2: Find successful logons after brute force attempts
+let SuccessfulBreachAccounts = BruteForceAttempts
+| join kind=inner (
+    DeviceLogonEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType == "LogonSuccess"
+    | project AccountName, RemoteIP, SuccessTime = Timestamp, SuccessDevice = DeviceName, LogonType
+) on AccountName // Removed RemoteIP constraint - attacker might use different IP for success
+| where SuccessTime > LastFailure
+| where datetime_diff('day', SuccessTime, LastFailure) <= 7  // Extended to 7 days instead of 24 hours
+| summarize 
+    InitialBreachTime = min(SuccessTime),
+    InitialBreachDevice = take_any(SuccessDevice),
+    BruteForceDetails = take_any(bag_pack("FailedAttempts", FailedAttempts, "FirstFailure", FirstFailure, "LastFailure", LastFailure, "SourceIP", RemoteIP))
+    by AccountName;
+
+// Debug: Show successful breaches found
+// SuccessfulBreachAccounts | take 10;
+
+// Step 3: Track lateral movement from breached accounts
+let LateralMovement = SuccessfulBreachAccounts
+| join kind=inner (
+    DeviceLogonEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType == "LogonSuccess"
+    | summarize 
+        DevicesAccessed = make_set(DeviceName, 100),
+        DeviceCount = dcount(DeviceName),
+        LogonTypes = make_set(LogonType),
+        IPAddresses = make_set(RemoteIP, 50),
+        FirstLateralMove = min(Timestamp),
+        LastActivity = max(Timestamp),
+        TotalLogons = count(),
+        RemoteLogons = countif(LogonType in ("RemoteInteractive", "Network", "NetworkCleartext"))
+    by AccountName
+) on AccountName
+| where FirstLateralMove >= InitialBreachTime // Changed to >= to include initial breach device
+| where DeviceCount >= lateral_threshold;
+
+// Debug: Show lateral movement found
+// LateralMovement | take 10;
+
+// Step 4: Build complete attack narrative
+LateralMovement
+| extend 
+    AttackDuration = datetime_diff('hour', LastActivity, InitialBreachTime),
+    TimeToLateralMove = datetime_diff('minute', FirstLateralMove, InitialBreachTime)
+| project 
+    AccountName,
+    AttackStory = strcat(
+        "🚨 COMPLETE ATTACK CHAIN DETECTED\n",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n",
+        "👤 Compromised Account: ", AccountName, "\n\n",
+        "📍 PHASE 1: BRUTE FORCE ATTACK\n",
+        "  • Failed attempts: ", tostring(BruteForceDetails.FailedAttempts), "\n",
+        "  • Attack duration: ", datetime_diff('minute', todatetime(BruteForceDetails.LastFailure), todatetime(BruteForceDetails.FirstFailure)), " minutes\n",
+        "  • Source IP: ", tostring(BruteForceDetails.SourceIP), "\n",
+        "  • First attempt: ", format_datetime(todatetime(BruteForceDetails.FirstFailure), 'yyyy-MM-dd HH:mm'), "\n",
+        "  • Last attempt: ", format_datetime(todatetime(BruteForceDetails.LastFailure), 'yyyy-MM-dd HH:mm'), "\n\n",
+        "✅ PHASE 2: SUCCESSFUL BREACH\n",
+        "  • Breach time: ", format_datetime(InitialBreachTime, 'yyyy-MM-dd HH:mm'), "\n",
+        "  • Initial compromise: ", tostring(InitialBreachDevice), "\n",
+        "  • Time from last failure to success: ", datetime_diff('minute', InitialBreachTime, todatetime(BruteForceDetails.LastFailure)), " minutes\n\n",
+        "🔄 PHASE 3: LATERAL MOVEMENT\n",
+        "  • Time to first lateral move: ", TimeToLateralMove, " minutes\n",
+        "  • Total devices accessed: ", DeviceCount, "\n",
+        "  • Remote logons: ", RemoteLogons, " (", round(RemoteLogons * 100.0 / TotalLogons, 1), "%)\n",
+        "  • Attack duration: ", AttackDuration, " hours\n",
+        "  • Logon types used: ", tostring(LogonTypes), "\n\n",
+        "🖥️ COMPROMISED SYSTEMS:\n",
+        "  ", substring(tostring(DevicesAccessed), 1, 500), "\n\n",
+        "🌐 LATERAL MOVEMENT IPs:\n",
+        "  ", substring(tostring(IPAddresses), 1, 200), "\n\n",
+        "⚠️ RISK INDICATORS:\n",
+        "  • Rapid lateral movement after breach\n",
+        "  • Multiple remote access methods\n",
+        "  • ", DeviceCount, " systems potentially compromised"
+    ),
+    InitialBreachTime,
+    DeviceCount,
+    AttackDuration,
+    TimeToLateralMove,
+    DevicesAccessed,
+    BruteForceAttempts = toint(BruteForceDetails.FailedAttempts)
+| order by DeviceCount desc, AttackDuration desc

@@ -1,0 +1,36 @@
+// Detect suspicious WinRM connections
+let timeframe = 24h;
+DeviceNetworkEvents
+| where Timestamp > ago(timeframe)
+| where RemotePort == 5985 or RemotePort == 5986 // WinRM ports
+| join kind=inner (
+    DeviceProcessEvents
+    | where Timestamp > ago(timeframe)
+    | where FileName in~ ("wsmprovhost.exe", "winrshost.exe", "powershell.exe")
+    | where ProcessCommandLine has_any("Enter-PSSession", "New-PSSession", "winrs", "invoke-command")
+)
+on DeviceId, Timestamp
+| join kind=leftouter (
+    DeviceLogonEvents
+    | where Timestamp > ago(timeframe)
+    | where ActionType == "LogonSuccess" and LogonType in (3, 10)
+)
+on DeviceId, Timestamp
+| where InitiatingProcessParentFileName != "svchost.exe" // Filter out legitimate system-initiated WinRM
+| summarize 
+    ConnectionCount = count(),
+    CommandLines = make_set(ProcessCommandLine),
+    SourceIPs = make_set(RemoteIP),
+    SourceDevices = make_set(RemoteDeviceName)
+    by DeviceId, DeviceName, AccountName, AccountDomain
+| where ConnectionCount > 3 // Threshold can be adjusted
+| project 
+    Timestamp, 
+    DeviceId, 
+    DeviceName, 
+    AccountName, 
+    AccountDomain, 
+    ConnectionCount, 
+    CommandLines, 
+    SourceIPs, 
+    SourceDevices

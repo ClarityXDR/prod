@@ -1,0 +1,109 @@
+let lookbackPeriod = 14d;
+let alertPeriod = 1d;
+let MaxSetSize = 5;
+let CombinedSignInLogs = union isfuzzy=True AADNonInteractiveUserSignInLogs, SigninLogs;
+let AzureRanges = externaldata(changeNumber: string, cloud: string, values: dynamic)
+    ["https://raw.githubusercontent.com/microsoft/mstic/master/PublicFeeds/MSFTIPRanges/ServiceTags_Public.json"] with(format='multijson')
+    | mv-expand values
+    | extend
+        Name = values.name,
+        AddressPrefixes = tostring(values.properties.addressPrefixes);
+let KnownLocations = CombinedSignInLogs
+    | where TimeGenerated between (ago(lookbackPeriod) .. ago(alertPeriod))
+    | where ResultType == 0
+    | summarize by UserPrincipalName, Location;
+let SuccessfulSignIns = CombinedSignInLogs
+    | where TimeGenerated > ago(alertPeriod)
+    | where ResultType == 0
+    | where not(pack(UserPrincipalName, Location) in (KnownLocations))
+    | extend LocationDetails = iif(isnotempty(column_ifexists("LocationDetails_dynamic", "")), column_ifexists("LocationDetails_dynamic", ""), parse_json(column_ifexists("LocationDetails_string", "")))
+    | extend DeviceDetail = iif(isnotempty(column_ifexists("DeviceDetail_dynamic", "")), column_ifexists("DeviceDetail_dynamic", ""), parse_json(column_ifexists("DeviceDetail_string", "")))
+    | extend City = tostring(todynamic(LocationDetails).city)
+    | extend State = tostring(todynamic(LocationDetails).state)
+    | extend Place = strcat(City, " - ", State)
+    | extend DeviceId = tostring(todynamic(DeviceDetail).deviceId)
+    | extend UserRiskLevel = tostring(column_ifexists("UserRiskLevel", ""))
+    | extend SignInRiskLevel = tostring(column_ifexists("RiskLevelDuringSignIn", ""))
+    | where isnotempty(UserRiskLevel) or isnotempty(SignInRiskLevel)
+    | where UserRiskLevel in ("high", "medium") or SignInRiskLevel in ("high", "medium");
+let MatchedIPs = SuccessfulSignIns
+    | evaluate ipv4_lookup(AzureRanges, IPAddress, AddressPrefixes)
+    | project IPAddress;
+let PlaceCounts = SuccessfulSignIns
+    | where IPAddress !in (MatchedIPs)
+    | where isnotempty(Location)
+    | summarize PlaceCount = count() by Place;
+SuccessfulSignIns
+| where IPAddress !in (MatchedIPs)
+| where isnotempty(Location)
+| join kind=leftouter (PlaceCounts) on Place
+| where PlaceCount <= 3  // Only include places that appear 3 times or less
+| summarize 
+    FirstSeen=min(TimeGenerated), 
+    LastSeen=max(TimeGenerated),
+    Results=make_set(strcat(tostring(ResultType), " - ", ResultDescription), MaxSetSize),
+    IPAddresses=make_set(IPAddress, MaxSetSize),
+    UserAgents=make_set(UserAgent, MaxSetSize),
+    Places=make_set(Place, MaxSetSize),
+    DeviceIds=make_set(DeviceId, MaxSetSize),
+    UserRiskLevels=make_set(UserRiskLevel, MaxSetSize),
+    SignInRiskLevels=make_set(SignInRiskLevel, MaxSetSize),
+    TotalSignIns=count(),
+    UniqueIPCount=dcount(IPAddress),
+    UniqueDeviceCount=dcount(DeviceId)
+    by UserPrincipalName, Location, Category
+| extend
+    Name = tostring(split(UserPrincipalName, '@', 0)[0]),
+    UPNSuffix = tostring(split(UserPrincipalName, '@', 1)[0]),
+    // Create clear threat indicators
+    ThreatSummary = strcat(
+        "🚨 RISKY SIGN-IN FROM NEW LOCATION: ",
+        Location,
+        " | Risk Level: ",
+        iff(array_length(UserRiskLevels) > 0, strcat_array(UserRiskLevels, ","), "N/A"),
+        " | ",
+        TotalSignIns,
+        " sign-ins from ",
+        UniqueIPCount,
+        " IPs"
+    ),
+    InvestigationPriority = case(
+        UserRiskLevels has "high" or SignInRiskLevels has "high", "🔴 CRITICAL - High Risk",
+        UserRiskLevels has "medium" or SignInRiskLevels has "medium", "🟠 HIGH - Medium Risk",
+        "🟡 MEDIUM - Unusual Location"
+    ),
+    AttackIndicators = strcat(
+        "• User hasn't signed in from ", Location, " in the past 14 days",
+        "\n• Risk levels detected: User=", strcat_array(UserRiskLevels, ","), " SignIn=", strcat_array(SignInRiskLevels, ","),
+        "\n• ", UniqueIPCount, " different IPs used",
+        "\n• ", UniqueDeviceCount, " devices involved",
+        "\n• Location is rare (≤3 users)"
+    ),
+    RequiredActions = strcat(
+        "1. Verify with user if travel to ", Location, " is legitimate",
+        "\n2. Check for concurrent sign-ins from different locations",
+        "\n3. Review conditional access compliance",
+        "\n4. If suspicious: Reset password & revoke sessions"
+    ),
+    TimeWindowHours = datetime_diff('hour', LastSeen, FirstSeen)
+| project
+    InvestigationPriority,
+    ThreatSummary,
+    UserPrincipalName,
+    Name,
+    Location,
+    AttackIndicators,
+    RequiredActions,
+    FirstSeen,
+    LastSeen,
+    TimeWindowHours,
+    TotalSignIns,
+    UniqueIPCount,
+    IPAddresses,
+    UserAgents,
+    Places,
+    DeviceIds,
+    UserRiskLevels,
+    SignInRiskLevels,
+    Category
+| order by InvestigationPriority asc, FirstSeen asc

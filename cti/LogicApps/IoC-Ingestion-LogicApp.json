@@ -1,0 +1,332 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logicAppName": {
+            "type": "string",
+            "defaultValue": "CTI-IoC-Ingestion",
+            "metadata": {
+                "description": "Name of the Logic App"
+            }
+        }
+    },
+    "variables": {
+        "azureLogAnalyticsDataCollectorConnectionName": "azureloganalyticsdatacollector"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azureLogAnalyticsDataCollectorConnectionName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "displayName": "Azure Log Analytics Data Collector",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalyticsdatacollector')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('logicAppName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('azureLogAnalyticsDataCollectorConnectionName'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "indicators": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "type": {
+                                                        "type": "string",
+                                                        "enum": ["FileHash", "IPAddress", "URL", "Domain", "Certificate"]
+                                                    },
+                                                    "value": {
+                                                        "type": "string"
+                                                    },
+                                                    "confidence": {
+                                                        "type": "integer",
+                                                        "minimum": 1,
+                                                        "maximum": 100
+                                                    },
+                                                    "source": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": {
+                                                        "type": "string"
+                                                    },
+                                                    "severity": {
+                                                        "type": "string",
+                                                        "enum": ["Low", "Medium", "High", "Critical"]
+                                                    },
+                                                    "tlp": {
+                                                        "type": "string",
+                                                        "enum": ["White", "Green", "Amber", "Red"]
+                                                    }
+                                                },
+                                                "required": ["type", "value", "confidence", "source"]
+                                            }
+                                        }
+                                    },
+                                    "required": ["indicators"]
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_placement_strategy": {
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "placementStrategy",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "For_each_indicator": {
+                            "foreach": "@triggerBody()?['indicators']",
+                            "actions": {
+                                "Determine_placement_strategy": {
+                                    "type": "Switch",
+                                    "expression": "@items('For_each_indicator')?['type']",
+                                    "cases": {
+                                        "FileHash": {
+                                            "case": "FileHash",
+                                            "actions": {
+                                                "Set_FileHash_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Primary"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "IPAddress": {
+                                            "case": "IPAddress",
+                                            "actions": {
+                                                "Check_IP_Context": {
+                                                    "type": "If",
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "contains": [
+                                                                    "@items('For_each_indicator')?['description']",
+                                                                    "email"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "actions": {
+                                                        "Set_IP_Email_Strategy": {
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "placementStrategy",
+                                                                "value": "Exchange_ConnectionFilter"
+                                                            }
+                                                        }
+                                                    },
+                                                    "else": {
+                                                        "actions": {
+                                                            "Set_IP_General_Strategy": {
+                                                                "type": "SetVariable",
+                                                                "inputs": {
+                                                                    "name": "placementStrategy",
+                                                                    "value": "MDCA_EntraID"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "URL": {
+                                            "case": "URL",
+                                            "actions": {
+                                                "Check_URL_Context": {
+                                                    "type": "If",
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "contains": [
+                                                                    "@items('For_each_indicator')?['description']",
+                                                                    "phish"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "actions": {
+                                                        "Set_URL_Phishing_Strategy": {
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "placementStrategy",
+                                                                "value": "Exchange_TenantAllowBlock"
+                                                            }
+                                                        }
+                                                    },
+                                                    "else": {
+                                                        "actions": {
+                                                            "Set_URL_Malware_Strategy": {
+                                                                "type": "SetVariable",
+                                                                "inputs": {
+                                                                    "name": "placementStrategy",
+                                                                    "value": "MDE_Primary_Exchange_Secondary"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Domain": {
+                                            "case": "Domain",
+                                            "actions": {
+                                                "Set_Domain_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Exchange_Dual"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Certificate": {
+                                            "case": "Certificate",
+                                            "actions": {
+                                                "Set_Certificate_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Primary"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {
+                                            "Set_Default_Strategy": {
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "placementStrategy",
+                                                    "value": "Manual_Review_Required"
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "Create_indicator_record": {
+                                    "type": "Compose",
+                                    "inputs": {
+                                        "IndicatorId": "@guid()",
+                                        "IndicatorType": "@items('For_each_indicator')?['type']",
+                                        "IndicatorValue": "@items('For_each_indicator')?['value']",
+                                        "ConfidenceScore": "@items('For_each_indicator')?['confidence']",
+                                        "Source": "@items('For_each_indicator')?['source']",
+                                        "Description": "@items('For_each_indicator')?['description']",
+                                        "Severity": "@items('For_each_indicator')?['severity']",
+                                        "TLP": "@items('For_each_indicator')?['tlp']",
+                                        "CreatedDate": "@utcnow()",
+                                        "ExpirationDate": "@addDays(utcnow(), if(greater(items('For_each_indicator')?['confidence'], 80), 90, 30))",
+                                        "PlacementStrategy": "@variables('placementStrategy')",
+                                        "DeploymentStatus": "Pending",
+                                        "ValidationStatus": "Pending"
+                                    },
+                                    "runAfter": {
+                                        "Determine_placement_strategy": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                },
+                                "Log_to_Sentinel": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": "@outputs('Create_indicator_record')",
+                                        "path": "/api/logs",
+                                        "queries": {
+                                            "Log-Type": "CTI_IndicatorManagement"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Create_indicator_record": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_placement_strategy": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Response": {
+                            "type": "Response",
+                            "inputs": {
+                                "statusCode": 200,
+                                "body": {
+                                    "message": "Indicators processed successfully",
+                                    "processedCount": "@length(triggerBody()?['indicators'])",
+                                    "timestamp": "@utcnow()"
+                                }
+                            },
+                            "runAfter": {
+                                "For_each_indicator": [
+                                    "Succeeded"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureloganalyticsdatacollector": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azureLogAnalyticsDataCollectorConnectionName'))]",
+                                "connectionName": "[variables('azureLogAnalyticsDataCollectorConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalyticsdatacollector')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "logicAppUrl": {
+            "type": "string",
+            "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', parameters('logicAppName')), '/triggers/manual'), '2017-07-01').value]"
+        }
+    }
+}

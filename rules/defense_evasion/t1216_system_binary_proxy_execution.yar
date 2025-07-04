@@ -1,0 +1,28 @@
+rule: SystemBinaryProxyExecution
+meta:
+  title: "System Binary Proxy Execution (T1216)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1216"]
+  severity: "medium"
+  description: "Detects use of system binaries to proxy execution of malicious code."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "msiexec.exe"
+      - "installutil.exe"
+      - "forfiles.exe"
+      - "certreq.exe"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine"]
+  entity_columns: []

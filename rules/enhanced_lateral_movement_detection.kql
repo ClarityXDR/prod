@@ -1,0 +1,69 @@
+// Enhanced Lateral Movement Detection with Attack Story Context
+let lookback = 30d;
+let baseline_period = 14d;
+let detection_window = 1d;
+// Step 1: Calculate baseline behavior
+let BaselineBehavior = DeviceLogonEvents
+| where Timestamp between (ago(lookback) .. ago(detection_window))
+| summarize DistinctDevices=dcount(DeviceId) by AccountName, bin(Timestamp, 1d)
+| summarize 
+    AvgDevicesPerDay=avg(DistinctDevices),
+    MaxDevicesHistorical=max(DistinctDevices),
+    StdDev=stdev(DistinctDevices) 
+    by AccountName;
+// Step 2: Get current anomalous activity with details
+let CurrentAnomalies = DeviceLogonEvents
+| where Timestamp > ago(detection_window)
+| summarize 
+    DevicesAccessed=make_set(DeviceName, 100),
+    DeviceCount=dcount(DeviceId),
+    LogonTypes=make_set(LogonType),
+    FirstSeen=min(Timestamp),
+    LastSeen=max(Timestamp),
+    TotalLogons=count(),
+    IPAddresses=make_set(RemoteIP, 50)
+    by AccountName;
+// Step 3: Join and calculate risk scores
+BaselineBehavior
+| join kind=inner CurrentAnomalies on AccountName
+| where DeviceCount > AvgDevicesPerDay * 3  // Your original threshold
+| extend 
+    DeviationMultiple = round(DeviceCount / AvgDevicesPerDay, 2),
+    RiskScore = case(
+        DeviceCount > AvgDevicesPerDay * 10, "Critical",
+        DeviceCount > AvgDevicesPerDay * 5, "High", 
+        DeviceCount > AvgDevicesPerDay * 3, "Medium",
+        "Low"
+    ),
+    AnomalyStartTime = FirstSeen,
+    DurationHours = datetime_diff('hour', LastSeen, FirstSeen)
+| project 
+    AccountName,
+    AttackNarrative = strcat(
+        "🚨 POTENTIAL LATERAL MOVEMENT DETECTED\n",
+        "Account '", AccountName, "' shows suspicious activity:\n",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+        "📊 BASELINE vs CURRENT:\n",
+        "  • Normal daily device access: ", round(AvgDevicesPerDay, 1), " devices\n",
+        "  • Current device access: ", DeviceCount, " devices (", DeviationMultiple, "x normal)\n",
+        "  • Historical maximum: ", MaxDevicesHistorical, " devices\n\n",
+        "⏰ TIMELINE:\n", 
+        "  • Anomaly started: ", format_datetime(AnomalyStartTime, 'yyyy-MM-dd HH:mm'), "\n",
+        "  • Duration: ", DurationHours, " hours\n",
+        "  • Total logon events: ", TotalLogons, "\n\n",
+        "🖥️ AFFECTED SYSTEMS (", DeviceCount, " devices):\n",
+        "  ", substring(tostring(DevicesAccessed), 1, 500), "\n\n",
+        "🔐 LOGON METHODS USED:\n",
+        "  ", tostring(LogonTypes), "\n\n",
+        "🌐 SOURCE IPs:\n",
+        "  ", substring(tostring(IPAddresses), 1, 200)
+    ),
+    RiskScore,
+    DeviceCount,
+    AvgDevicesPerDay = round(AvgDevicesPerDay, 1),
+    DeviationMultiple,
+    DevicesAccessed,
+    LogonTypes,
+    AnomalyStartTime,
+    DurationHours
+| order by DeviationMultiple desc

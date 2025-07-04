@@ -1,0 +1,51 @@
+// Defender XDR Heartbeat Monitoring Query with Weekend Flexibility - Detection Rule Format
+let timeRange = 4m;
+let monitoredServers = dynamic([
+    "USWW2ISP01", "USWW2QISP03.qcnet.com", "USWW2QISP06.qcnet.com", 
+    "USWW2WIP19.qcnet.com", "USWW2DBP10.qcnet.com", "usww2lxp25", 
+    "urto-pr-webvm.qcnet.com", "urto-pr-iappvm.qcnet.com",
+    "urto-pr-sqlsdvm.qcnet.com", "USWW2QWIP01", "USWW2QDCP01.qcnet.com",
+    "USWW2QDCP02.qcnet.com"
+]);
+// Determine if current time is weekend (Saturday = 6, Sunday = 0)
+let currentDayOfWeek = dayofweek(now());
+let isWeekend = currentDayOfWeek == 0 or currentDayOfWeek == 6;
+// Set alert thresholds based on day of week
+let weekdayAlertThreshold = 10m;    // 1 hour during weekdays
+let weekendAlertThreshold = 30m;    // 4 hours during weekends
+let currentThreshold = iff(isWeekend, weekendAlertThreshold, weekdayAlertThreshold);
+let combinedActivity = union
+(
+    DeviceEvents
+    | where Timestamp > ago(timeRange)
+    | where DeviceName has_any (monitoredServers)
+    | extend HostCustomEntity = tostring(split(DeviceName, '.')[0])
+    | project Timestamp, DeviceName, HostCustomEntity, ReportId, DeviceId, ActivityType = "DeviceEvent"
+),
+(
+    DeviceNetworkEvents
+    | where Timestamp > ago(timeRange)
+    | where DeviceName has_any (monitoredServers)
+    | extend HostCustomEntity = tostring(split(DeviceName, '.')[0])
+    | project Timestamp, DeviceName, HostCustomEntity, ReportId, DeviceId, ActivityType = "NetworkEvent"
+);
+combinedActivity
+| summarize LastSeen = max(Timestamp), LastReportId = any(ReportId), LastDeviceId = any(DeviceId), LastActivityType = any(ActivityType) by HostCustomEntity
+| extend HoursSinceLastSeen = now() - LastSeen
+| where HoursSinceLastSeen >= currentThreshold
+| project 
+    Timestamp = now(),
+    ReportId = LastReportId,
+    DeviceId = LastDeviceId,
+    HostCustomEntity,
+    LastSeen,
+    HoursSinceLastSeen,
+    AlertThreshold = currentThreshold,
+    LastActivityType,
+    Status = case(
+        HoursSinceLastSeen >= (currentThreshold * 2), "Critical",
+        HoursSinceLastSeen >= currentThreshold, "Warning",
+        "Normal"
+    ),
+    DayType = iff(isWeekend, "Weekend", "Weekday")
+| order by HoursSinceLastSeen desc

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources."
+      }
+    },
+    "subscriptionId": {
+      "type": "string",
+      "defaultValue": "[subscription().subscriptionId]",
+      "metadata": {
+        "description": "Subscription ID where the EASM will be deployed"
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "defaultValue": "[subscription().tenantId]",
+      "metadata": {
+        "description": "Tenant ID of the organization"
+      }
+    },
+    "easmPlanName": {
+      "type": "string",
+      "defaultValue": "DefenderEASM",
+      "metadata": {
+        "description": "Name of the EASM plan"
+      }
+    },
+    "skuName": {
+      "type": "string",
+      "defaultValue": "Standard",
+      "allowedValues": [
+        "Standard",
+        "Premium"
+      ],
+      "metadata": {
+        "description": "SKU for the EASM deployment"
+      }
+    },
+    "tagsForResources": {
+      "type": "object",
+      "defaultValue": {
+        "environment": "production",
+        "purpose": "security"
+      },
+      "metadata": {
+        "description": "Tags to apply to the EASM resources"
+      }
+    }
+  },
+  "variables": {
+    "easmResourceId": "[resourceId('Microsoft.Security/easm/plans', 'default', parameters('easmPlanName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Security/easm/plans",
+      "apiVersion": "2022-09-01-preview",
+      "name": "[concat('default/', parameters('easmPlanName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tagsForResources')]",
+      "properties": {
+        "skuName": "[parameters('skuName')]",
+        "provisioningState": "Created"
+      }
+    }
+  ],
+  "outputs": {
+    "easmResourceId": {
+      "type": "string",
+      "value": "[variables('easmResourceId')]"
+    }
+  }
+}

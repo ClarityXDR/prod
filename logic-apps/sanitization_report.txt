@@ -1,0 +1,43 @@
+﻿Logic Apps Sanitization Report
+Generated: 07/02/2025 11:57:17
+
+Files Processed: 43
+Output Directory: logicapps_sanitized_final
+
+Sanitization Mappings Applied:
+  Bio-Rad Laboratories -> Your Company
+  global_infosec@bio-rad\.com -> security@company.com
+  teams-3 -> teams-connection
+  gregory_hall@bio-rad\.com -> admin@company.com
+  azuremonitorlogs-5 -> azuremonitorlogs-connection
+  19:4fbae423f8a8450e939b43cb777183ff@thread\.tacv2 -> 19:00000000000000000000000000000000@thread.tacv2
+  @global\.bio-rad\.com -> @company.com
+  azuresentinel-10 -> azuresentinel-connection
+  b4e0a897-1c30-4c8a-950f-1117044b8298 -> 00000000-0000-0000-0000-000000000000
+  SecurityTeam@bio-rad\.com -> securityteam@company.com
+  Bio-Rad Global Information Security -> Your Company Information Security
+  Bio-Rad -> YourCompany
+  office365-12 -> office365-connection
+  InformationSecurity -> YourResourceGroup
+  https://www\.bio-rad\.com/sites/default/files/2023-02/bio-rad-logo\.svg -> https://company.com/logo.svg
+  bio-rad\.com -> company.com
+  gregory_hall@ -> admin@
+
+Additional Pattern-Based Sanitizations:
+  * Subscription IDs in resource paths
+  * Connection IDs in resource paths
+  * Managed API paths with subscription IDs
+
+IMPORTANT NOTES FOR DEPLOYMENT:
+1. Update all connection references to point to your actual Azure connections
+2. Replace placeholder subscription IDs with your actual subscription ID
+3. Update resource group names to match your deployment
+4. Replace email addresses with your actual security team contacts
+5. Update Teams channel IDs if using Teams connectors
+6. Replace company branding URLs and references
+7. Review and test all Logic Apps before deployment
+
+FILES THAT REQUIRE MANUAL REVIEW:
+* Any files with custom business logic that may contain environment-specific values
+* Files with API keys or secrets (should use Key Vault references)
+* Files with webhook URLs or callback URLs

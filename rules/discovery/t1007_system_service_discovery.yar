@@ -1,0 +1,28 @@
+// filepath: rules/discovery/t1007_system_service_discovery.yar
+rule: SystemServiceDiscovery
+meta:
+  title: "System Service Discovery (T1007)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1007"]
+  severity: "medium"
+  description: "Detects use of service discovery commands."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|has_any:
+      - "sc query"
+      - "Get-Service"
+      - "service.msc"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine", "InitiatingProcessAccountName"]
+  entity_columns: []

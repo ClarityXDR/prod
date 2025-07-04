@@ -1,0 +1,106 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_HTTP_request_is_received": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "userPrincipalName": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "actions": {
+            "HTTP": {
+                "runAfter": {},
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://graph.microsoft.com/v1.0/contacts@{triggerBody()?['userPrincipalName']}/manager",
+                    "method": "GET"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Parse_JSON": {
+                "runAfter": {
+                    "HTTP": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('HTTP')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "@@odata.context": {
+                                "type": "string"
+                            },
+                            "@@odata.type": {
+                                "type": "string"
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "businessPhones": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "displayName": {
+                                "type": "string"
+                            },
+                            "givenName": {
+                                "type": "string"
+                            },
+                            "jobTitle": {
+                                "type": "string"
+                            },
+                            "mail": {
+                                "type": "string"
+                            },
+                            "mobilePhone": {},
+                            "officeLocation": {
+                                "type": "string"
+                            },
+                            "preferredLanguage": {
+                                "type": "string"
+                            },
+                            "surname": {
+                                "type": "string"
+                            },
+                            "userPrincipalName": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {}
+        }
+    }
+}

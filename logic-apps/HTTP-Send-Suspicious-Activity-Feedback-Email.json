@@ -1,0 +1,504 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "Entities_-_Get_Accounts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/account"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Initialize_LoggedOnUser_Variable": {
+                "runAfter": {
+                    "Entities_-_Get_Accounts": [
+                        "Succeeded",
+                        "Failed"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "LoggedOnUser",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Initialize_UserEmail_Variable": {
+                "runAfter": {
+                    "Initialize_LoggedOnUser_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "UserEmail",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Extract_LoggedOnUser": {
+                "runAfter": {
+                    "Initialize_UserEmail_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "LoggedOnUser",
+                    "value": "@if(and(not(empty(body('Entities_-_Get_Accounts')?['Accounts'])), not(empty(first(body('Entities_-_Get_Accounts')?['Accounts'])?['LoggedOnUsers']))), coalesce(first(first(body('Entities_-_Get_Accounts')?['Accounts'])?['LoggedOnUsers'])?['AccountName'], ''), 'SecurityTeam')"
+                }
+            },
+            "Build_Email_Address": {
+                "runAfter": {
+                    "Extract_LoggedOnUser": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "UserEmail",
+                    "value": "@{if(equals(variables('LoggedOnUser'), 'SecurityTeam'), 'securityteam@company.com', concat(variables('LoggedOnUser'), '@company.com'))}"
+                }
+            },
+            "Entities_-_Get_Hosts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/host"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Entities_-_Get_FileHashes": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/filehash"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "ListofAlerts": {
+                "runAfter": {
+                    "Build_Email_Address": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AlertDescription",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Parse_Alert_JSON": {
+                "runAfter": {
+                    "ListofAlerts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@triggerBody()?['object']?['properties']?['Alerts']",
+                    "schema": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "properties": {
+                                    "type": "object",
+                                    "properties": {
+                                        "alertDisplayName": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "remediationSteps": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "severity": {
+                                            "type": "string"
+                                        },
+                                        "compromisedEntity": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "Format_Alert_Description": {
+                "runAfter": {
+                    "Parse_Alert_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose",
+                "inputs": "@if(equals(length(body('Parse_Alert_JSON')), 0), 'No alert details available', concat('<strong>Alert: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['alertDisplayName'], '<br/><br/><strong>Description: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['description'], '<br/><br/><strong>Severity: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['severity'], '<br/><br/><strong>Compromised Entity: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['compromisedEntity'], '<br/><br/><strong>Remediation Steps:</strong><ol>', replace(string(first(body('Parse_Alert_JSON'))?['properties']?['remediationSteps']), ',', '</li><li>'), '</ol>'))"
+            },
+            "Set_Alert_Description_Variable": {
+                "runAfter": {
+                    "Format_Alert_Description": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "AlertDescription",
+                    "value": "@outputs('Format_Alert_Description')"
+                }
+            },
+            "Add_comment_to_incident_(V3)": {
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                        "message": "<p class=\"editor-paragraph\">Suspicious Activity Feedback Email Sent, Teams Chat Created</p>"
+                    },
+                    "path": "/Incidents/Comment"
+                }
+            },
+            "For_each": {
+                "foreach": "@if(empty(body('Entities_-_Get_Accounts')?['Accounts']), json('[{\"Email\":\"security@company.com\"}]'), body('Entities_-_Get_Accounts')?['Accounts'])",
+                "actions": {
+                    "Send_an_email_(V2)": {
+                        "runAfter": {
+                            "Compose_Email_response": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "To": "admin@company.com",
+                                "Subject": "Feedback Required - Suspicious Activity Detected @{triggerBody()?['object']?['properties']?['title']}",
+                                "Body": "<p class=\"editor-paragraph\">This email would have been sent to:</p><p class=\"editor-paragraph\">DISPLAYNAME = @{body('Get_user_profile_(V2)')?['displayName']}</p><p class=\"editor-paragraph\">UPN = @{body('Get_user_profile_(V2)')?['userPrincipalName']}</p><p class=\"editor-paragraph\">MAIL = @{body('Get_user_profile_(V2)')?['mail']}</p><p class=\"editor-paragraph\">MANAGERNAME = @{body('Get_manager_(V2)')?['displayName']}</p><p class=\"editor-paragraph\">MANAGERMAIL = @{body('Get_manager_(V2)')?['mail']}</p><p class=\"editor-paragraph\">@{outputs('Compose_Email_response')}</p>",
+                                "Sensitivity": "8a2ae3bc-ce57-4db2-a60b-01b63080e6ea",
+                                "Importance": "High"
+                            },
+                            "path": "/v2/Mail"
+                        }
+                    },
+                    "Compose_Teams_Chat_Request": {
+                        "runAfter": {
+                            "Send_an_email_(V2)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose",
+                        "inputs": "@json(concat('{\"chatType\":\"group\",\"topic\":\"Suspicious Activity Feedback Request ', triggerBody()?['object']?['properties']?['title'], '\",\"members\":[{\"@odata.type\":\"#microsoft.graph.aadUserConversationMember\",\"roles\":[\"owner\"],\"user@odata.bind\":\"https://graph.microsoft.com/v1.0/users/c18222bf-a1c3-4142-86f8-ced0927c8857\"},{\"@odata.type\":\"#microsoft.graph.aadUserConversationMember\",\"roles\":[\"owner\"],\"user@odata.bind\":\"https://graph.microsoft.com/v1.0/users/84eb0e11-52d0-44a9-8827-8fdf6dd570d0\"}]}'))"
+                    },
+                    "Get_manager_(V2)": {
+                        "runAfter": {
+                            "Get_user_profile_(V2)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365users']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/codeless/v1.0/users/@{encodeURIComponent(body('Get_user_profile_(V2)')?['id'])}/manager"
+                        }
+                    },
+                    "Parse_JSON_for_UPN": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@items('For_each')",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "accountName": {
+                                        "type": "string"
+                                    },
+                                    "upnSuffix": {
+                                        "type": "string"
+                                    },
+                                    "aadTenantId": {
+                                        "type": "string"
+                                    },
+                                    "aadUserId": {
+                                        "type": "string"
+                                    },
+                                    "isDomainJoined": {
+                                        "type": "boolean"
+                                    },
+                                    "displayName": {
+                                        "type": "string"
+                                    },
+                                    "additionalData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Sources": {
+                                                "type": "string"
+                                            },
+                                            "IsDeleted": {
+                                                "type": "string"
+                                            },
+                                            "IsEnabled": {
+                                                "type": "string"
+                                            },
+                                            "MailAddress": {
+                                                "type": "string"
+                                            },
+                                            "UserType": {
+                                                "type": "string"
+                                            },
+                                            "SyncFromAad": {
+                                                "type": "string"
+                                            },
+                                            "UpnName": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "friendlyName": {
+                                        "type": "string"
+                                    },
+                                    "Type": {
+                                        "type": "string"
+                                    },
+                                    "Name": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "Get_user_profile_(V2)": {
+                        "runAfter": {
+                            "Parse_JSON_for_UPN": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365users']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/codeless/v1.0/users/@{encodeURIComponent(body('Parse_JSON_for_UPN')?['additionalData']?['UpnName'])}"
+                        }
+                    },
+                    "Compose_Email_response": {
+                        "runAfter": {
+                            "Get_manager_(V2)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose",
+                        "inputs": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body {\n            font-family: 'Segoe UI', Arial, Helvetica, sans-serif;\n            background-color: #f5f5f5;\n            margin: 0;\n            padding: 0;\n            color: #333;\n            line-height: 1.6;\n        }\n        .email-container {\n            max-width: 680px;\n            margin: 20px auto;\n            background-color: #ffffff;\n            border-radius: 12px;\n            box-shadow: 0 4px 20px rgba(0,0,0,0.08);\n            overflow: hidden;\n        }\n        .header {\n            background: linear-gradient(135deg, #C5203E 0%, #9a1a30 100%);\n            padding: 35px 30px;\n            text-align: center;\n            position: relative;\n        }\n        .header img {\n            max-height: 55px;\n            filter: brightness(0) invert(1);\n        }\n        .alert-banner {\n            background-color: #FFF3CD;\n            border-left: 5px solid #FFC107;\n            padding: 18px 25px;\n            margin: 0;\n            display: flex;\n            align-items: center;\n            box-shadow: 0 2px 5px rgba(0,0,0,0.05);\n        }\n        .alert-banner h2 {\n            color: #856404;\n            margin: 0;\n            font-size: 19px;\n            font-weight: 600;\n            letter-spacing: 0.3px;\n        }\n        .alert-banner h2 i {\n            margin-right: 8px;\n            font-size: 22px;\n        }\n        .content {\n            padding: 35px;\n            color: #333333;\n        }\n        .greeting {\n            font-size: 17px;\n            margin-bottom: 24px;\n            color: #222;\n        }\n        .section {\n            margin-bottom: 28px;\n            padding: 24px;\n            background-color: #f9f9fb;\n            border-radius: 10px;\n            border-left: 5px solid #C5203E;\n            box-shadow: 0 2px 8px rgba(0,0,0,0.03);\n            transition: all 0.3s ease;\n        }\n        .section:hover {\n            box-shadow: 0 4px 12px rgba(0,0,0,0.07);\n            transform: translateY(-2px);\n        }\n        .section-title {\n            color: #C5203E;\n            font-size: 19px;\n            font-weight: 600;\n            margin-bottom: 14px;\n            display: flex;\n            align-items: center;\n            letter-spacing: 0.3px;\n        }\n        .section-title i {\n            margin-right: 8px;\n        }\n        .detail-item {\n            margin: 10px 0;\n            padding-left: 22px;\n            border-bottom: 1px dashed rgba(0,0,0,0.08);\n            padding-bottom: 10px;\n        }\n        .detail-item:last-child {\n            border-bottom: none;\n        }\n        .detail-label {\n            font-weight: 600;\n            color: #555;\n            display: inline-block;\n            width: 100px;\n        }\n        .detail-value {\n            color: #333;\n            font-family: 'Courier New', monospace;\n            background-color: #f0f2f5;\n            padding: 3px 8px;\n            border-radius: 4px;\n            font-size: 14px;\n            border: 1px solid #e5e8ec;\n        }\n        .risk-section {\n            background-color: #FFF8E1;\n            border-left: 5px solid #FFC107;\n        }\n        .action-section {\n            background-color: #E8F4FE;\n            border-left: 5px solid #0073E6;\n        }\n        .feedback-section {\n            background-color: #E8F5E8;\n            border-left: 5px solid #28A745;\n        }\n        .steps-list {\n            margin: 18px 0;\n            padding-left: 25px;\n        }\n        .steps-list li {\n            margin: 12px 0;\n            color: #333;\n            padding-left: 5px;\n        }\n        .steps-list li strong {\n            background-color: rgba(0, 115, 230, 0.1);\n            padding: 2px 6px;\n            border-radius: 4px;\n        }\n        .important-note {\n            background-color: #E8F4FE;\n            border: 1px solid #B3D9FF;\n            border-radius: 10px;\n            padding: 18px;\n            margin: 24px 0;\n            position: relative;\n            box-shadow: 0 2px 8px rgba(0,0,0,0.04);\n        }\n        .important-note:before {\n            content: '💡';\n            position: absolute;\n            left: -12px;\n            top: 50%;\n            transform: translateY(-50%);\n            background: #fff;\n            width: 25px;\n            height: 25px;\n            border-radius: 50%;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border: 1px solid #B3D9FF;\n            font-size: 14px;\n        }\n        .important-note strong {\n            color: #0073E6;\n            display: block;\n            margin-bottom: 5px;\n            font-size: 15px;\n        }\n        .footer {\n            background: linear-gradient(to right, #f8f9fa, #f0f2f5);\n            padding: 28px;\n            text-align: center;\n            border-top: 1px solid #eaedf0;\n        }\n        .footer p {\n            margin: 5px 0;\n            color: #666;\n            font-size: 14px;\n        }\n        .signature {\n            margin-top: 32px;\n            padding-top: 24px;\n            border-top: 1px solid #eaedf0;\n            font-style: italic;\n        }\n        ul {\n            margin: 10px 0;\n        }\n        .btn-response {\n            display: inline-block;\n            color: white;\n            padding: 12px 24px;\n            text-decoration: none;\n            border-radius: 6px;\n            margin: 10px 15px 15px 0;\n            font-weight: 600;\n            text-align: center;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.2);\n            transition: all 0.3s ease;\n        }\n        .btn-authorized {\n            background: linear-gradient(135deg, #28A745 0%, #1E7E34 100%);\n        }\n        .btn-unauthorized {\n            background: linear-gradient(135deg, #DC3545 0%, #A71E2A 100%);\n        }\n        .btn-response:hover {\n            transform: translateY(-3px);\n            box-shadow: 0 5px 15px rgba(0,0,0,0.3);\n        }\n        .alert-icon {\n            font-size: 24px;\n            margin-right: 10px;\n        }\n        .step-container {\n            background-color: #f0f7ff;\n            border-radius: 8px;\n            padding: 18px;\n            margin: 15px 0;\n        }\n        .step-title {\n            font-weight: 600;\n            color: #0073E6;\n            margin-bottom: 10px;\n            display: flex;\n            align-items: center;\n        }\n        .step-title i {\n            margin-right: 8px;\n        }\n        .step-number {\n            display: inline-block;\n            width: 24px;\n            height: 24px;\n            background-color: #0073E6;\n            color: white;\n            border-radius: 50%;\n            text-align: center;\n            line-height: 24px;\n            margin-right: 10px;\n            font-weight: 600;\n            font-size: 14px;\n        }\n        .contact-info {\n            background-color: #F8F9FA;\n            border-radius: 8px;\n            padding: 15px;\n            margin: 15px 0;\n            border-left: 4px solid #28A745;\n        }\n    </style>\n</head>\n<body>\n    <div class=\"email-container\">\n        <div class=\"header\">\n            <img src=\"https://www.YourCompany.com/sites/default/files/2023-02/YourCompany-logo.svg\" alt=\"YourCompany Logo\">\n        </div>\n        \n        <div class=\"alert-banner\">\n            <h2>🔍 Suspicious Activity Detected - Your Response Required</h2>\n        </div>\n        \n        <div class=\"content\">\n            <p class=\"greeting\">Hi @{body('Get_user_profile_(V2)')?['displayName']} ,</p>\n            \n            <p>We hope this message finds you well.</p>\n            \n            <p>Our security monitoring systems have detected potentially suspicious activity associated with your account or device. Before taking any security actions, we want to verify with you whether this activity was authorized and part of your legitimate work activities.</p>\n            \n            <div class=\"section\">\n                <div class=\"section-title\">📊 Activity Details</div>\n                <p><strong>@{triggerBody()?['object']?['properties']?['title']}</strong></p>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Host:</span> <span class=\"detail-value\">@{if(empty(body('Entities_-_Get_Hosts')?['Hosts']), 'Unknown Host', coalesce(first(body('Entities_-_Get_Hosts')?['Hosts'])?['HostName'], first(body('Entities_-_Get_Hosts')?['Hosts'])?['DnsDomain'], 'Unknown Host'))}</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">User:</span> <span class=\"detail-value\">@{if(empty(body('Entities_-_Get_Accounts')?['Accounts']), 'Unknown User', coalesce(first(body('Entities_-_Get_Accounts')?['Accounts'])?['Name'], first(body('Entities_-_Get_Accounts')?['Accounts'])?['UPNSuffix'], 'Unknown User'))}</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">File/Process:</span> <span class=\"detail-value\">@{if(empty(body('Entities_-_Get_FileHashes')?['Files']), 'Network scanning activity detected', coalesce(first(body('Entities_-_Get_FileHashes')?['Files'])?['Name'], 'Network scanning activity detected'))}</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Detection Time:</span> <span class=\"detail-value\">@{formatDateTime(triggerBody()?['object']?['properties']?['createdTimeUtc'], 'yyyy-MM-dd HH:mm:ss')} UTC</span>\n                </div>\n            </div>\n            \n            <div class=\"section risk-section\">\n                <div class=\"section-title\">🔍 What We Detected</div>\n                <p><strong>Suspicious Activity Summary:</strong></p>\n                <P>@{variables('AlertDescription')}<p>\n                <p>@{coalesce(triggerBody()?['object']?['properties']?['description'], 'Network scanning or reconnaissance activity has been detected. This could include tools like NMAP, port scanning, or other network discovery activities that may be part of legitimate security testing or unauthorized reconnaissance.')}</p>\n                \n                <p><strong>Common Legitimate Uses:</strong></p>\n                <ul>\n                    <li>Authorized security testing or vulnerability assessment</li>\n                    <li>Network troubleshooting by IT staff</li>\n                    <li>Approved penetration testing activities</li>\n                    <li>System administration tasks</li>\n                </ul>\n            </div>\n            \n            <div class=\"important-note\">\n                <strong>Your Response is Required:</strong>\n                <p>To help us determine the appropriate response, please confirm whether this activity was authorized and part of your legitimate work duties. Some users are permitted to use network scanning tools as part of their job responsibilities.</p>\n            </div>\n            \n            <div class=\"section feedback-section\">\n                <div class=\"section-title\">✅ Please Respond Immediately</div>\n                \n                <div class=\"step-container\">\n                    <div class=\"step-title\"><i>📞</i> Contact Information for Your Response</div>\n                    <p><strong>Please contact us immediately using one of the methods below:</strong></p>\n                    \n                    <div class=\"contact-info\">\n                        <p><strong>Email Response:</strong> security@company.com</p>\n                        <p><strong>Include in your response:</strong></p>\n                        <ul>\n                            <li>Incident Reference: @{triggerBody()?['object']?['properties']?['incidentNumber']}</li>\n                            <li>Whether this activity was authorized (YES/NO)</li>\n                            <li>Brief explanation of the business purpose (if authorized)</li>\n                            <li>Your name and department</li>\n                        </ul>\n                    </div>\n                    \n                    <div class=\"contact-info\">\n                        <p><strong>Phone Response:</strong> Contact your local IT Support or Security Team</p>\n                        <p><strong>Teams/Slack:</strong> Reach out to the Information Security Team directly</p>\n                    </div>\n                </div>\n                \n                <div class=\"step-container\">\n                    <div class=\"step-title\"><i>⏰</i> Response Timeline</div>\n                    <p><strong>Please respond within 2 hours of receiving this email.</strong></p>\n                    \n                    <ol class=\"steps-list\">\n                        <li><span class=\"step-number\">1</span> <strong>If AUTHORIZED:</strong> Reply confirming this was legitimate activity and provide business justification</li>\n                        <li><span class=\"step-number\">2</span> <strong>If UNAUTHORIZED:</strong> Reply immediately - we may need to take protective actions for your account/device</li>\n                        <li><span class=\"step-number\">3</span> <strong>If UNSURE:</strong> Contact us immediately for clarification - we're here to help</li>\n                    </ol>\n                    \n                    <p><strong>What happens next:</strong></p>\n                    <ul>\n                        <li>If confirmed as authorized: We'll document this and close the alert</li>\n                        <li>If unauthorized: We'll work with you to secure your account and investigate further</li>\n                        <li>If no response: Protective measures may be automatically applied as a precaution</li>\n                    </ul>\n                </div>\n            </div>\n            \n            <p style=\"margin-top: 30px;\">We appreciate your prompt response to help us maintain our security posture while ensuring minimal disruption to legitimate business activities. Your cooperation is essential in this process.</p>\n            \n            <div class=\"signature\">\n                <p><strong>Best Regards,</strong><br>\n                Your Company Information Security Team</p>\n            </div>\n        </div>\n        \n        <div class=\"footer\">\n            <p>This is an automated security notification from Your Company</p>\n            <p><strong>Incident Reference:</strong> @{triggerBody()?['object']?['properties']?['incidentNumber']}</p>\n            <p>If you have questions or need assistance, please contact the Information Security Team immediately</p>\n        </div>\n    </div>\n</body>\n</html>"
+                    },
+                    "Create_a_chat": {
+                        "runAfter": {
+                            "Compose_Teams_Chat_Request": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['teams']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "members": "c18222bf-a1c3-4142-86f8-ced0927c8857;7a89f96b-72ea-433d-a876-8f416f6fcd29",
+                                "topic": "@triggerBody()?['object']?['properties']?['title']"
+                            },
+                            "path": "/beta/chats"
+                        }
+                    },
+                    "Post_message_in_a_chat_or_channel": {
+                        "runAfter": {
+                            "Create_a_chat": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['teams']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "recipient": "@body('Create_a_chat')?['id']",
+                                "messageBody": "<p class=\"editor-paragraph\">@{outputs('Compose_Email_response')}</p>"
+                            },
+                            "path": "/beta/teams/conversation/message/poster/Flow bot/location/@{encodeURIComponent('Group chat')}"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_Hosts": [
+                        "Succeeded",
+                        "Failed"
+                    ],
+                    "Entities_-_Get_FileHashes": [
+                        "Succeeded",
+                        "Failed"
+                    ],
+                    "Set_Alert_Description_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "Company logo link": {
+                "defaultValue": "https://www.YourCompany.com/sites/default/files/2023-02/YourCompany-logo.svg",
+                "type": "String"
+            },
+            "Report name": {
+                "defaultValue": "YourCompany",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-HTTP-Send-Isolation-Courtesy-Email",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-Block_URL",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-3": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "office365": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "o365-HTTP-Send-Isolation-Courtesy-Email"
+                },
+                "office365users": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365users",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "office365users"
+                },
+                "teams": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/teams",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "teams-connection"
+                }
+            }
+        }
+    }
+}

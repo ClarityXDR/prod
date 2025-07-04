@@ -1,0 +1,102 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "rgName": {
+            "value": "ClarityXDR-Production"
+        },
+        "location": {
+            "value": "East US"
+        },
+        "workspaceName": {
+            "value": "ClarityXDR-Prod-Workspace"
+        },
+        "pricingTier": {
+            "value": "CapacityReservation"
+        },
+        "capacityReservation": {
+            "value": 200
+        },
+        "enableDataConnectors": {
+            "value": [
+                "AzureActiveDirectory",
+                "MicrosoftDefenderAdvancedThreatProtection",
+                "SecurityEvents",
+                "Office365",
+                "AzureActivity",
+                "DNS"
+            ]
+        },
+        "aadStreams": {
+            "value": [
+                "SigninLogs",
+                "AuditLogs",
+                "NonInteractiveUserSignInLogs",
+                "ServicePrincipalSignInLogs",
+                "ManagedIdentitySignInLogs",
+                "ADFSSignInLogs"
+            ]
+        },
+        "severityLevels": {
+            "value": [
+                "High",
+                "Medium",
+                "Low"
+            ]
+        },
+        "enableSolutions1P": {
+            "value": [
+                "Microsoft Entra ID",
+                "Microsoft Defender XDR",
+                "Windows Security Events",
+                "Microsoft 365",
+                "Azure Activity",
+                "DNS Essentials"
+            ]
+        },
+        "dailyQuota": {
+            "value": 50
+        },
+        "standardTierRetention": {
+            "value": 180
+        },
+        "auxiliaryTierRetention": {
+            "value": 90
+        },
+        "basicTierRetention": {
+            "value": 365
+        },
+        "enableMultiTier": {
+            "value": true
+        },
+        "enableUeba": {
+            "value": true
+        },
+        "identityProviders": {
+            "value": [
+                "AzureActiveDirectory"
+            ]
+        },
+        "enableDiagnostics": {
+            "value": true
+        },
+        "entraIDTier": {
+            "value": "Auxiliary"
+        },
+        "enableMLAlerts": {
+            "value": true
+        },
+        "enableFusionAlert": {
+            "value": true
+        },
+        "enableMicrosoftAlerts": {
+            "value": true
+        },
+        "enableCostDashboard": {
+            "value": true
+        },
+        "enableScheduledAlerts": {
+            "value": true
+        }
+    }
+}

@@ -1,0 +1,47 @@
+// Query to find devices with disabled or non-working EDR
+let TimeRange = 30d; // Adjust timeframe as needed
+// Get devices with EDR health issues
+let EDRHealthIssues = 
+DeviceInfo
+| where Timestamp > ago(TimeRange)
+| summarize arg_max(Timestamp, *) by DeviceId
+| where OnboardingStatus != "Onboarded" 
+    or SensorHealthState != "Active"
+    or IsAzureADJoined == false and OSPlatform == "Windows10" // Optional: focus on managed devices
+| project DeviceId, DeviceName, OnboardingStatus, SensorHealthState, OSPlatform, OSVersion, LastSeenTime = Timestamp;
+// Get devices with no recent EDR events (potential sensor issues)
+let NoRecentEDREvents = 
+DeviceInfo
+| where Timestamp > ago(TimeRange)
+| summarize arg_max(Timestamp, *) by DeviceId
+| join kind=leftanti (
+    DeviceEvents
+    | where Timestamp > ago(7d) // No events in last 7 days
+    | distinct DeviceId
+) on DeviceId
+| project DeviceId, DeviceName, OSPlatform, OSVersion, LastSeenTime = Timestamp, OnboardingStatus = "", SensorHealthState = "";
+// Get devices with network protection disabled
+let NetworkProtectionDisabled =
+DeviceInfo
+| where Timestamp > ago(TimeRange)
+| summarize arg_max(Timestamp, *) by DeviceId
+| join kind=inner (
+    DeviceTvmSecureConfigurationAssessment
+    | where ConfigurationId == "scid-91" // Network Protection configuration
+    | where IsCompliant == false
+    | where Timestamp > ago(7d)
+    | project DeviceId
+) on DeviceId
+| project DeviceId, DeviceName, OSPlatform, OSVersion, LastSeenTime = Timestamp, OnboardingStatus = "", SensorHealthState = "";
+// Combine all results
+union 
+(EDRHealthIssues | extend IssueType = "EDR Health Issue"),
+(NoRecentEDREvents | extend IssueType = "No Recent EDR Events"),
+(NetworkProtectionDisabled | extend IssueType = "Network Protection Disabled")
+| summarize Issues = make_set(IssueType), 
+           arg_max(LastSeenTime, DeviceName, OSPlatform, OSVersion, OnboardingStatus, SensorHealthState) by DeviceId
+| project DeviceId, DeviceName, OSPlatform, OSVersion, 
+          OnboardingStatus, SensorHealthState, Issues, LastSeenTime
+| where OnboardingStatus != "Unsupported"
+| where LastSeenTime > ago(7d) // Filter out devices not seen in last 7 days
+| sort by DeviceName asc

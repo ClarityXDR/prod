@@ -1,0 +1,28 @@
+// filepath: rules/discovery/t1057_process_discovery.yar
+rule: ProcessDiscovery
+meta:
+  title: "Process Discovery (T1057)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1057"]
+  severity: "medium"
+  description: "Detects process listing commands."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|has_any:
+      - "tasklist"
+      - "ps "
+      - "Get-Process"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine", "InitiatingProcessAccountName"]
+  entity_columns: []

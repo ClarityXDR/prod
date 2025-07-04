@@ -1,0 +1,99 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "rgName": {
+            "value": "ClarityXDR-Sentinel"
+        },
+        "location": {
+            "value": "East US"
+        },
+        "workspaceName": {
+            "value": "ClarityXDR-Workspace"
+        },
+        "pricingTier": {
+            "value": "PerGB2018"
+        },
+        "capacityReservation": {
+            "value": 100
+        },
+        "enableDataConnectors": {
+            "value": [
+                "AzureActiveDirectory",
+                "MicrosoftDefenderAdvancedThreatProtection",
+                "SecurityEvents"
+            ]
+        },
+        "aadStreams": {
+            "value": [
+                "SigninLogs",
+                "AuditLogs",
+                "NonInteractiveUserSignInLogs",
+                "ServicePrincipalSignInLogs"
+            ]
+        },
+        "severityLevels": {
+            "value": [
+                "High",
+                "Medium"
+            ]
+        },
+        "enableSolutions1P": {
+            "value": [
+                "Microsoft Entra ID",
+                "Microsoft Defender XDR",
+                "Windows Security Events"
+            ]
+        },
+        "enableSolutionsEssentials": {
+            "value": []
+        },
+        "enableSolutionsTraining": {
+            "value": []
+        },
+        "dailyQuota": {
+            "value": 10
+        },
+        "standardTierRetention": {
+            "value": 90
+        },
+        "auxiliaryTierRetention": {
+            "value": 30
+        },
+        "basicTierRetention": {
+            "value": 180
+        },
+        "enableMultiTier": {
+            "value": true
+        },
+        "enableUeba": {
+            "value": true
+        },
+        "identityProviders": {
+            "value": [
+                "AzureActiveDirectory"
+            ]
+        },
+        "enableDiagnostics": {
+            "value": false
+        },
+        "entraIDTier": {
+            "value": "Auxiliary"
+        },
+        "enableMLAlerts": {
+            "value": true
+        },
+        "enableFusionAlert": {
+            "value": true
+        },
+        "enableMicrosoftAlerts": {
+            "value": true
+        },
+        "enableCostDashboard": {
+            "value": true
+        },
+        "enableScheduledAlerts": {
+            "value": true
+        }
+    }
+}

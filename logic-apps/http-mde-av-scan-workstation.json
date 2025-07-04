@@ -1,0 +1,106 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "manual": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                    "schema": {
+                        "properties": {
+                            "hostname": {
+                                "type": "string"
+                            },
+                            "scanType": {
+                                "type": "string"
+                            },
+                            "machineId": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "Actions_-_Run_antivirus_scan": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "Comment": "Run FullScan on @{triggerBody()?['hostname']}",
+                                "ScanType": "Full"
+                            },
+                            "path": "/api/machines/@{encodeURIComponent(triggerBody()?['machineId'])}/runAntiVirusScan"
+                        }
+                    }
+                },
+                "runAfter": {},
+                "else": {
+                    "actions": {
+                        "Actions_-_Run_antivirus_scan_1": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "Comment": "Run QuickScan on @{triggerBody()?['hostname']}",
+                                    "ScanType": "Quick"
+                                },
+                                "path": "/api/machines/@{encodeURIComponent(triggerBody()?['machineId'])}/runAntiVirusScan"
+                            }
+                        }
+                    }
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "equals": [
+                                "@triggerBody()?['scanType']",
+                                "Full"
+                            ]
+                        }
+                    ]
+                },
+                "type": "If"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "wdatp": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/wdatp",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "wdatp-2",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

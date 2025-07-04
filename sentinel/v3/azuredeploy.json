@@ -1,0 +1,524 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "description": "Microsoft Sentinel All-In-One V3 - Cost Optimized Deployment",
+        "author": "ClarityXDR Team",
+        "version": "3.0.0"
+    },
+    "parameters": {
+        "rgName": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource Group name"
+            },
+            "defaultValue": "ClarityXDR-Sentinel"
+        },
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Location for all resources"
+            },
+            "defaultValue": "East US"
+        },
+        "workspaceName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name for the Log Analytics workspace"
+            },
+            "defaultValue": "ClarityXDR-Workspace"
+        },
+        "pricingTier": {
+            "type": "string",
+            "metadata": {
+                "description": "Pricing tier: pergb2018 or legacy tiers (Free, Standalone, PerNode, Standard or Premium) which are not available to all customers."
+            },
+            "allowedValues": [
+                "CapacityReservation",
+                "Free",
+                "LACluster",
+                "PerGB2018",
+                "PerNode",
+                "Premium",
+                "Standalone",
+                "Standard"
+            ],
+            "defaultValue": "PerGB2018"
+        },
+        "capacityReservation": {
+            "type": "int",
+            "metadata": {
+                "description": "Commitment tier"
+            },
+            "allowedValues": [
+                100,
+                200,
+                300,
+                400,
+                500,
+                1000,
+                2000,
+                5000
+            ],
+            "defaultValue": 100
+        },
+        "enableDataConnectors": {
+            "type": "array",
+            "metadata": {
+                "description": "The kind of data connectors to enable"
+            },
+            "defaultValue": []
+        },
+        "aadStreams": {
+            "type": "array",
+            "metadata": {
+                "description": "The list of data types to enable for Azure AD connector"
+            },
+            "defaultValue": []
+        },
+        "severityLevels": {
+            "type": "array",
+            "metadata": {
+                "description": "Severity levels desired for Analytics Rules"
+            },
+            "defaultValue": []
+        },
+        "enableSolutions1P": {
+            "type": "array",
+            "metadata": {
+                "description": "The list of Content Hub 1st party solutions to deploy"
+            },
+            "defaultValue": []
+        },
+        "enableSolutionsEssentials": {
+            "type": "array",
+            "metadata": {
+                "description": "The list of Content Hub Essentials solutions to deploy"
+            },
+            "defaultValue": []
+        },
+        "enableSolutionsTraining": {
+            "type": "array",
+            "metadata": {
+                "description": "The list of Content Hub Training solutions to deploy"
+            },
+            "defaultValue": []
+        },
+        "dailyQuota": {
+            "type": "int",
+            "metadata": {
+                "description": "Daily ingestion limit in GBs. This limit doesn't apply to the following tables: SecurityAlert, SecurityBaseline, SecurityBaselineSummary, SecurityDetection, etc."
+            },
+            "defaultValue": 10
+        },
+        "standardTierRetention": {
+            "type": "int",
+            "minValue": 7,
+            "maxValue": 730,
+            "metadata": {
+                "description": "Number of days of retention for standard tier data."
+            },
+            "defaultValue": 90
+        },
+        "auxiliaryTierRetention": {
+            "type": "int",
+            "minValue": 7,
+            "maxValue": 730,
+            "metadata": {
+                "description": "Number of days of retention for auxiliary tier data."
+            },
+            "defaultValue": 30
+        },
+        "basicTierRetention": {
+            "type": "int",
+            "minValue": 7,
+            "maxValue": 2555,
+            "metadata": {
+                "description": "Number of days of retention for basic tier data (longer retention at lower cost)."
+            },
+            "defaultValue": 180
+        },
+        "enableMultiTier": {
+            "type": "bool",
+            "metadata": {
+                "description": "Enable multi-tier storage for cost optimization"
+            },
+            "defaultValue": true
+        },
+        "enableUeba": {
+            "type": "bool",
+            "metadata": {
+                "description": "Whether or not UEBA should be enabled"
+            },
+            "defaultValue": true
+        },
+        "identityProviders": {
+            "type": "array",
+            "metadata": {
+                "description": "Array of identity providers to be synched with UEBA"
+            },
+            "defaultValue": []
+        },
+        "enableDiagnostics": {
+            "type": "bool",
+            "defaultValue": false
+        },
+        "entraIDTier": {
+            "type": "string",
+            "defaultValue": "Auxiliary",
+            "allowedValues": ["Standard", "Auxiliary", "Basic"],
+            "metadata": {
+                "description": "Storage tier for Entra ID logs"
+            }
+        },
+        "enableMLAlerts": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable ML-based alerts"
+            }
+        },
+        "enableFusionAlert": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Fusion alerts"
+            }
+        },
+        "enableMicrosoftAlerts": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Microsoft Security alerts"
+            }
+        },
+        "enableCostDashboard": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Deploy the cost optimization dashboard"
+            }
+        },
+        "enableScheduledAlerts": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable scheduled analytics rules"
+            }
+        }
+    },
+    "variables": {
+        "artifacts_location": "[if(contains(deployment().properties, 'templateLink'), uri(deployment().properties.templateLink.uri, '.'), 'https://raw.githubusercontent.com/DataGuys/Sentinel-All-In-OneV3/main/v3')]",
+        "dataConnectorsKind": "[parameters('enableDataConnectors')]",
+        "tenantId": "[subscription().tenantId]",
+        "subscriptionGuid": "[subscription().subscriptionId]",
+        "defaultRoleGuid": "[guid(subscription().id, parameters('workspaceName'))]",
+        "severityLevelsString": "[if(empty(parameters('severityLevels')), '', join(',', parameters('severityLevels')))]",
+        "enableDataConnectorsString": "[if(empty(parameters('enableDataConnectors')), '', join(',', parameters('enableDataConnectors')))]",
+        "enableSolutions1PString": "[if(empty(parameters('enableSolutions1P')), '', join(',', parameters('enableSolutions1P')))]",
+        "enableSolutionsEssentialsString": "[if(empty(parameters('enableSolutionsEssentials')), '', join(',', parameters('enableSolutionsEssentials')))]",
+        "enableSolutionsTrainingString": "[if(empty(parameters('enableSolutionsTraining')), '', join(',', parameters('enableSolutionsTraining')))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Resources/resourceGroups",
+            "apiVersion": "2021-04-01",
+            "name": "[parameters('rgName')]",
+            "location": "[parameters('location')]",
+            "properties": {}
+        },
+        {
+            "name": "workspaceCreation",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.Resources/resourceGroups',parameters('rgName'))]"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/workspace.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "pricingTier": {
+                        "value": "[parameters('pricingTier')]"
+                    },
+                    "dailyQuota": {
+                        "value": "[parameters('dailyQuota')]"
+                    },
+                    "dataRetention": {
+                        "value": "[parameters('standardTierRetention')]"
+                    },
+                    "immediatePurgeDataOn30Days": {
+                        "value": true
+                    },
+                    "capacityReservation": {
+                        "value": "[parameters('capacityReservation')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "settingsDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/settings.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "enableUeba": {
+                        "value": "[parameters('enableUeba')]"
+                    },
+                    "identityProviders": {
+                        "value": "[parameters('identityProviders')]"
+                    },
+                    "enableDiagnostics": {
+                        "value": "[parameters('enableDiagnostics')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "dataConnectorsDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/dataConnectors.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "dataConnectorsKind": {
+                        "value": "[variables('dataConnectorsKind')]"
+                    },
+                    "aadStreams": {
+                        "value": "[parameters('aadStreams')]"
+                    },
+                    "tenantId": {
+                        "value": "[variables('tenantId')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "subscriptionId": {
+                        "value": "[variables('subscriptionGuid')]"
+                    },
+                    "entraIDTier": {
+                        "value": "[parameters('entraIDTier')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "alertRulesDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation",
+                "dataConnectorsDeployment"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/alertRules.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "dataConnectorsKind": {
+                        "value": "[variables('dataConnectorsKind')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "enableFusionAlert": {
+                        "value": "[parameters('enableFusionAlert')]"
+                    },
+                    "enableMicrosoftAlerts": {
+                        "value": "[parameters('enableMicrosoftAlerts')]"
+                    },
+                    "enableMLAlerts": {
+                        "value": "[parameters('enableMLAlerts')]"
+                    }
+                }
+            }
+        },
+        {
+            "condition": "[parameters('enableScheduledAlerts')]",
+            "name": "scheduledRulesDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "alertRulesDeployment"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/scheduledAlerts.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "dataConnectorsList": {
+                        "value": "[variables('enableDataConnectorsString')]"
+                    },
+                    "severityLevels": {
+                        "value": "[variables('severityLevelsString')]"
+                    },
+                    "roleGuid": {
+                        "value": "[variables('defaultRoleGuid')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "solutionsAndAlertsDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation",
+                "alertRulesDeployment"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/LinkedTemplates/solutionsAndAlerts.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "enableSolutions1P": {
+                        "value": "[variables('enableSolutions1PString')]"
+                    },
+                    "enableSolutionsEssentials": {
+                        "value": "[variables('enableSolutionsEssentialsString')]"
+                    },
+                    "enableSolutionsTraining": {
+                        "value": "[variables('enableSolutionsTrainingString')]"
+                    },
+                    "enableAlerts": {
+                        "value": "[parameters('enableScheduledAlerts')]"
+                    },
+                    "severityLevels": {
+                        "value": "[variables('severityLevelsString')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "roleGuid": {
+                        "value": "[guid(subscription().id, parameters('workspaceName'), 'solutions')]"
+                    }
+                }
+            }
+        },
+        {
+            "condition": "[parameters('enableMultiTier')]",
+            "name": "tableRetentionDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation",
+                "dataConnectorsDeployment"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/tableretention.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "standardTierRetention": {
+                        "value": "[parameters('standardTierRetention')]"
+                    },
+                    "auxiliaryTierRetention": {
+                        "value": "[parameters('auxiliaryTierRetention')]"
+                    },
+                    "basicTierRetention": {
+                        "value": "[parameters('basicTierRetention')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    }
+                }
+            }
+        },
+        {
+            "condition": "[parameters('enableCostDashboard')]",
+            "name": "costWorkbookDeployment",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "dependsOn": [
+                "workspaceCreation"
+            ],
+            "resourceGroup": "[parameters('rgName')]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifacts_location'), '/costworkbook.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "workspaceName": {
+                        "value": "[parameters('workspaceName')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "workspaceName": {
+            "type": "string",
+            "value": "[parameters('workspaceName')]"
+        },
+        "resourceGroup": {
+            "type": "string",
+            "value": "[parameters('rgName')]"
+        },
+        "location": {
+            "type": "string",
+            "value": "[parameters('location')]"
+        }
+    }
+}

@@ -1,0 +1,262 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_entity": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/entity/@{encodeURIComponent('Host')}"
+                }
+            }
+        },
+        "actions": {
+            "Entities_-_Get_Hosts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "value": "@triggerBody()?['Entity']?['properties']?['HostName']"
+                    },
+                    "path": "/entities/host"
+                }
+            },
+            "Parse_Host_Response": {
+                "runAfter": {
+                    "Entities_-_Get_Hosts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('Entities_-_Get_Hosts')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "Hosts": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "Initialize_Host_Array": {
+                "runAfter": {
+                    "Parse_Host_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "HostArray",
+                            "type": "array",
+                            "value": "@if(contains(body('Parse_Host_Response'), 'Hosts'), body('Parse_Host_Response')?['Hosts'], array(triggerBody()?['Entity']))"
+                        }
+                    ]
+                }
+            },
+            "For_each": {
+                "foreach": "@variables('HostArray')",
+                "actions": {
+                    "Check_if_MdatpDeviceId_exists": {
+                        "type": "Condition",
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@items('For_each')?['additionalData']?['MdatpDeviceId']",
+                                            "@null"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Machines_-_Get_single_machine": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['wdatp-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/machines/@{encodeURIComponent(items('For_each')?['additionalData']?['MdatpDeviceId'])}"
+                                }
+                            },
+                            "Condition": {
+                                "actions": {
+                                    "Add_comment_to_incident_(V3)": {
+                                        "runAfter": {
+                                            "Actions_-_Run_live_response": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                                "message": "<p class=\"editor-paragraph\">@{items('For_each')?['HostName']} MDE Offline Scan Triggered</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        }
+                                    },
+                                    "Actions_-_Run_live_response": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['wdatp-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "Comment": "MDE Offline Scan Triggered",
+                                                "Commands": [
+                                                    {
+                                                        "type": "run mde-offline.ps1"
+                                                    }
+                                                ]
+                                            },
+                                            "path": "/api/machines/@{encodeURIComponent(items('For_each')?['additionalData']?['MdatpDeviceId'])}/runliveresponse"
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Machines_-_Get_single_machine": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Add_comment_to_incident_(V3)_2": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                                    "message": "<p class=\"editor-paragraph\">@{items('For_each')?['HostName']} does not have MDEDeviceID in the Entities list. &nbsp;MDE Offline scan cannot be triggered.&nbsp;</p>"
+                                                },
+                                                "path": "/Incidents/Comment"
+                                            }
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "not": {
+                                                "equals": [
+                                                    "@body('Machines_-_Get_single_machine')?['id']",
+                                                    "@null"
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                },
+                                "type": "If"
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "Add_comment_to_incident_-_No_MdatpDeviceId": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                            "message": "<p class=\"editor-paragraph\">@{items('For_each')?['HostName']} does not have an MdatpDeviceId property. MDE Offline scan cannot be triggered.</p>"
+                                        },
+                                        "path": "/Incidents/Comment"
+                                    }
+                                }
+                            }
+                        },
+                        "type": "If"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_Host_Array": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-Run-MDE-Offline-Scan",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "wdatp-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/wdatp",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "wdatp-1",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                }
+            }
+        }
+    }
+}

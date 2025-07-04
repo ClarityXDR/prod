@@ -1,0 +1,30 @@
+// filepath: rules/discovery/t1087_account_discovery.yar
+rule: AccountDiscovery
+meta:
+  title: "Account Discovery (T1087)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1087"]
+  severity: "medium"
+  description: "Detects enumeration of users or groups via common commands."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|has_any:
+      - "net user"
+      - "net group"
+      - "dsquery"
+      - "Get-ADUser"
+      - "Get-ADGroup"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine", "InitiatingProcessAccountName"]
+  entity_columns: []

@@ -1,0 +1,218 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "For_each": {
+                "type": "Foreach",
+                "foreach": "@body('Entities_-_Get_URLs')?['URLs']",
+                "actions": {
+                    "Condition": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "contains": [
+                                            "@variables('processedHosts')",
+                                            "@replace(replace(body('Parse_JSON')?['url'], 'https://', ''), 'http://', '')"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Add_comment_to_incident_(V3)": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['azuresentinel-2']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                                        "message": "<h3>🔍 VirusTotal URL Analysis</h3><p><strong>URL:</strong> @{body('Parse_JSON')?['url']}<br><br>@{if(greater(body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['malicious'], 1), '<div style=\"color:red;\"><strong><u>📊 Threat Summary</u></strong>', '<div><strong><u>📊 Threat Summary</u></strong>')}<br><strong>Reputation Score:</strong> @{body('Get_URL_report')?['data']?['attributes']?['reputation']}<br><strong>Detections:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['malicious']} Malicious / @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['suspicious']} Suspicious<br><strong>Community Votes:</strong> @{body('Get_URL_report')?['data']?['attributes']?['total_votes']?['malicious']} Malicious / @{body('Get_URL_report')?['data']?['attributes']?['total_votes']?['harmless']} Harmless</div><br><strong><u>📈 Detailed Analysis</u></strong><br><strong>Harmless:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['harmless']}<br><strong>Undetected:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['undetected']}<br><strong>Suspicious:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['suspicious']}<br><strong>Malicious:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['malicious']}<br><strong>Timeout:</strong> @{body('Get_URL_report')?['data']?['attributes']?['last_analysis_stats']?['timeout']}</p>"
+                                    },
+                                    "path": "/Incidents/Comment"
+                                },
+                                "runAfter": {
+                                    "Append_to_array_variable": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "Compose": {
+                                "type": "Compose",
+                                "inputs": "VirusTotal enrichment completed for all IPs in this incident.",
+                                "runAfter": {
+                                    "Get_URL_report": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            },
+                            "Compose_URL_Safe_Base64": {
+                                "type": "Compose",
+                                "inputs": "@replace(replace(replace(base64(body('Parse_JSON')?['url']), '+', '-'), '/', '_'), '=', '')"
+                            },
+                            "Get_URL_report": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['virustotal_1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/v3/urls/@{outputs('Compose_URL_Safe_Base64')}"
+                                },
+                                "runAfter": {
+                                    "Compose_URL_Safe_Base64": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            },
+                            "Append_to_array_variable": {
+                                "type": "AppendToArrayVariable",
+                                "inputs": {
+                                    "name": "processedHosts",
+                                    "value": "@replace(replace(body('Parse_JSON')?['url'], 'https://', ''), 'http://', '')"
+                                },
+                                "runAfter": {
+                                    "Compose": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "runAfter": {
+                            "Parse_JSON": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Parse_JSON": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@items('For_each')",
+                            "schema": {
+                                "properties": {
+                                    "Type": {
+                                        "type": "string"
+                                    },
+                                    "friendlyName": {
+                                        "type": "string"
+                                    },
+                                    "url": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variable": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Entities_-_Get_URLs": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/url"
+                },
+                "runAfter": {}
+            },
+            "Initialize_variable": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "processedHosts",
+                            "type": "array",
+                            "value": []
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Entities_-_Get_URLs": [
+                        "Succeeded"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-MSSentinelAlert",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-2": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "virustotal_1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/virustotal",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "virustotal-Get-VirusTotalIPReport"
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-6",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

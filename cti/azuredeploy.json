@@ -1,0 +1,605 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "title": "Microsoft 365 E5 Central Threat Intelligence Solution",
+        "description": "Deploys a comprehensive threat intelligence management system with Microsoft Sentinel orchestration, Logic Apps automation, and Azure Automation scheduling.",
+        "author": "Bio-Rad Laboratories Inc."
+    },
+    "parameters": {
+        "projectName": {
+            "type": "string",
+            "defaultValue": "CTI",
+            "maxLength": 10,
+            "metadata": {
+                "description": "Prefix for all resource names. Keep it short and unique."
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for all resources"
+            }
+        },
+        "sentinelWorkspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "Microsoft Sentinel workspace ID (required for threat intelligence operations)"
+            }
+        },
+        "sentinelWorkspaceKey": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Microsoft Sentinel workspace primary key"
+            }
+        },
+        "exchangeCredentialUsername": {
+            "type": "string",
+            "metadata": {
+                "description": "Exchange Online service account username (e.g., cti-service@contoso.com)"
+            }
+        },
+        "exchangeCredentialPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Exchange Online service account password"
+            }
+        },
+        "graphAppId": {
+            "type": "string",
+            "metadata": {
+                "description": "Microsoft Graph application ID for API authentication"
+            }
+        },
+        "graphClientSecret": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Microsoft Graph application client secret"
+            }
+        },
+        "tenantId": {
+            "type": "string",
+            "defaultValue": "[subscription().tenantId]",
+            "metadata": {
+                "description": "Azure AD tenant ID"
+            }
+        },
+        "virusTotalApiKey": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "VirusTotal API key for indicator validation (optional)"
+            }
+        }
+    },
+    "variables": {
+        "resourceNames": {
+            "logicAppIngestion": "[concat(parameters('projectName'), '-IoC-Ingestion')]",
+            "logicAppValidation": "[concat(parameters('projectName'), '-Validation')]",
+            "automationAccount": "[concat(parameters('projectName'), '-AutomationAccount')]",
+            "logAnalyticsConnection": "[concat(parameters('projectName'), '-loganalytics-connection')]"
+        },
+        "templateBaseUrl": "https://raw.githubusercontent.com/DataGuys/cti/refs/heads/main/",
+        "deploymentNames": {
+            "ingestionLogicApp": "[concat('deploy-', variables('resourceNames').logicAppIngestion)]",
+            "validationLogicApp": "[concat('deploy-', variables('resourceNames').logicAppValidation)]",
+            "automationAccount": "[concat('deploy-', variables('resourceNames').automationAccount)]"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('resourceNames').logAnalyticsConnection]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "displayName": "Azure Log Analytics Data Collector - CTI",
+                "customParameterValues": {},
+                "parameterValues": {
+                    "username": "[parameters('sentinelWorkspaceId')]",
+                    "password": "[parameters('sentinelWorkspaceKey')]"
+                },
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azureloganalyticsdatacollector')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "azureloganalytics-query",
+            "location": "[parameters('location')]",
+            "properties": {
+                "displayName": "Azure Log Analytics Query - CTI",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azureloganalytics')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[variables('resourceNames').logicAppIngestion]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('resourceNames').logAnalyticsConnection)]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "indicators": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "type": {
+                                                        "type": "string",
+                                                        "enum": ["FileHash", "IPAddress", "URL", "Domain", "Certificate"]
+                                                    },
+                                                    "value": {
+                                                        "type": "string"
+                                                    },
+                                                    "confidence": {
+                                                        "type": "integer",
+                                                        "minimum": 1,
+                                                        "maximum": 100
+                                                    },
+                                                    "source": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": {
+                                                        "type": "string"
+                                                    },
+                                                    "severity": {
+                                                        "type": "string",
+                                                        "enum": ["Low", "Medium", "High", "Critical"]
+                                                    },
+                                                    "tlp": {
+                                                        "type": "string",
+                                                        "enum": ["White", "Green", "Amber", "Red"]
+                                                    }
+                                                },
+                                                "required": ["type", "value", "confidence", "source"]
+                                            }
+                                        }
+                                    },
+                                    "required": ["indicators"]
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_placement_strategy": {
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "placementStrategy",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "For_each_indicator": {
+                            "foreach": "@triggerBody()?['indicators']",
+                            "actions": {
+                                "Determine_placement_strategy": {
+                                    "type": "Switch",
+                                    "expression": "@items('For_each_indicator')?['type']",
+                                    "cases": {
+                                        "FileHash": {
+                                            "case": "FileHash",
+                                            "actions": {
+                                                "Set_FileHash_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Primary"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "IPAddress": {
+                                            "case": "IPAddress",
+                                            "actions": {
+                                                "Check_IP_Context": {
+                                                    "type": "If",
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "contains": [
+                                                                    "@items('For_each_indicator')?['description']",
+                                                                    "email"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "actions": {
+                                                        "Set_IP_Email_Strategy": {
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "placementStrategy",
+                                                                "value": "Exchange_ConnectionFilter"
+                                                            }
+                                                        }
+                                                    },
+                                                    "else": {
+                                                        "actions": {
+                                                            "Set_IP_General_Strategy": {
+                                                                "type": "SetVariable",
+                                                                "inputs": {
+                                                                    "name": "placementStrategy",
+                                                                    "value": "MDCA_EntraID"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "URL": {
+                                            "case": "URL",
+                                            "actions": {
+                                                "Check_URL_Context": {
+                                                    "type": "If",
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "contains": [
+                                                                    "@items('For_each_indicator')?['description']",
+                                                                    "phish"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "actions": {
+                                                        "Set_URL_Phishing_Strategy": {
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "placementStrategy",
+                                                                "value": "Exchange_TenantAllowBlock"
+                                                            }
+                                                        }
+                                                    },
+                                                    "else": {
+                                                        "actions": {
+                                                            "Set_URL_Malware_Strategy": {
+                                                                "type": "SetVariable",
+                                                                "inputs": {
+                                                                    "name": "placementStrategy",
+                                                                    "value": "MDE_Primary_Exchange_Secondary"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Domain": {
+                                            "case": "Domain",
+                                            "actions": {
+                                                "Set_Domain_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Exchange_Dual"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Certificate": {
+                                            "case": "Certificate",
+                                            "actions": {
+                                                "Set_Certificate_Strategy": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "placementStrategy",
+                                                        "value": "MDE_Primary"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {
+                                            "Set_Default_Strategy": {
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "placementStrategy",
+                                                    "value": "Manual_Review_Required"
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "Create_indicator_record": {
+                                    "type": "Compose",
+                                    "inputs": {
+                                        "IndicatorId": "@guid()",
+                                        "IndicatorType": "@items('For_each_indicator')?['type']",
+                                        "IndicatorValue": "@items('For_each_indicator')?['value']",
+                                        "ConfidenceScore": "@items('For_each_indicator')?['confidence']",
+                                        "Source": "@items('For_each_indicator')?['source']",
+                                        "Description": "@items('For_each_indicator')?['description']",
+                                        "Severity": "@items('For_each_indicator')?['severity']",
+                                        "TLP": "@items('For_each_indicator')?['tlp']",
+                                        "CreatedDate": "@utcnow()",
+                                        "ExpirationDate": "@addDays(utcnow(), if(greater(items('For_each_indicator')?['confidence'], 80), 90, 30))",
+                                        "PlacementStrategy": "@variables('placementStrategy')",
+                                        "DeploymentStatus": "Pending",
+                                        "ValidationStatus": "Pending"
+                                    },
+                                    "runAfter": {
+                                        "Determine_placement_strategy": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                },
+                                "Log_to_Sentinel": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": "@outputs('Create_indicator_record')",
+                                        "path": "/api/logs",
+                                        "queries": {
+                                            "Log-Type": "CTI_IndicatorManagement"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Create_indicator_record": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_placement_strategy": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Response": {
+                            "type": "Response",
+                            "inputs": {
+                                "statusCode": 200,
+                                "body": {
+                                    "message": "Indicators processed successfully",
+                                    "processedCount": "@length(triggerBody()?['indicators'])",
+                                    "timestamp": "@utcnow()"
+                                }
+                            },
+                            "runAfter": {
+                                "For_each_indicator": [
+                                    "Succeeded"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureloganalyticsdatacollector": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('resourceNames').logAnalyticsConnection)]",
+                                "connectionName": "[variables('resourceNames').logAnalyticsConnection]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azureloganalyticsdatacollector')]"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[variables('resourceNames').logicAppValidation]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('resourceNames').logAnalyticsConnection)]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },
+                        "tenantId": {
+                            "defaultValue": "[parameters('tenantId')]",
+                            "type": "String"
+                        },
+                        "graphAppId": {
+                            "defaultValue": "[parameters('graphAppId')]",
+                            "type": "String"
+                        },
+                        "graphClientSecret": {
+                            "defaultValue": "[parameters('graphClientSecret')]",
+                            "type": "SecureString"
+                        },
+                        "sentinelWorkspaceId": {
+                            "defaultValue": "[parameters('sentinelWorkspaceId')]",
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Hour",
+                                "interval": 6
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Get_Graph_Token": {
+                            "type": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "uri": "https://login.microsoftonline.com/@{parameters('tenantId')}/oauth2/v2.0/token",
+                                "headers": {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                "body": "client_id=@{parameters('graphAppId')}&scope=https://graph.microsoft.com/.default&client_secret=@{parameters('graphClientSecret')}&grant_type=client_credentials"
+                            }
+                        },
+                        "Query_pending_indicators": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureloganalytics']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "CTI_IndicatorManagement_CL | where ValidationStatus_s == 'Pending' and CreatedDate_t > ago(7d) | limit 50",
+                                "path": "/v1/workspaces/@{parameters('sentinelWorkspaceId')}/query",
+                                "queries": {
+                                    "timespan": "P7D"
+                                }
+                            },
+                            "runAfter": {
+                                "Get_Graph_Token": [
+                                    "Succeeded"
+                                ]
+                            }
+                        },
+                        "For_each_indicator_validation": {
+                            "foreach": "@body('Query_pending_indicators')?['value']",
+                            "actions": {
+                                "Validate_with_threat_intel": {
+                                    "type": "Http",
+                                    "inputs": {
+                                        "method": "GET",
+                                        "uri": "https://graph.microsoft.com/beta/security/threatIntelligence/indicators",
+                                        "headers": {
+                                            "Authorization": "Bearer @{body('Get_Graph_Token')?['access_token']}"
+                                        },
+                                        "queries": {
+                                            "$filter": "value eq '@{items('For_each_indicator_validation')?['IndicatorValue_s']}'"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Get_Graph_Token": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                },
+                                "Update_validation_status": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "IndicatorId": "@items('For_each_indicator_validation')?['IndicatorId_g']",
+                                            "ValidationStatus": "@if(greater(length(body('Validate_with_threat_intel')?['value']), 0), 'Validated', 'NotFound')",
+                                            "ValidationDate": "@utcnow()",
+                                            "ValidationSource": "Microsoft_Graph_ThreatIntel"
+                                        },
+                                        "path": "/api/logs",
+                                        "queries": {
+                                            "Log-Type": "CTI_ValidationResults"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Validate_with_threat_intel": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Query_pending_indicators": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureloganalytics": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', 'azureloganalytics-query')]",
+                                "connectionName": "azureloganalytics-query",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azureloganalytics')]"
+                            },
+                            "azureloganalyticsdatacollector": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('resourceNames').logAnalyticsConnection)]",
+                                "connectionName": "[variables('resourceNames').logAnalyticsConnection]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azureloganalyticsdatacollector')]"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[variables('resourceNames').automationAccount]",
+            "location": "[parameters('location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "sku": {
+                    "name": "Basic"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "ingestionLogicAppUrl": {
+            "type": "string",
+            "value": "[listCallbackURL(concat(resourceId('Microsoft.Logic/workflows', variables('resourceNames').logicAppIngestion), '/triggers/manual'), '2017-07-01').value]"
+        },
+        "validationLogicAppName": {
+            "type": "string",
+            "value": "[variables('resourceNames').logicAppValidation]"
+        },
+        "automationAccountName": {
+            "type": "string",
+            "value": "[variables('resourceNames').automationAccount]"
+        },
+        "resourceGroupName": {
+            "type": "string",
+            "value": "[resourceGroup().name]"
+        },
+        "deploymentInstructions": {
+            "type": "string",
+            "value": "Deployment completed successfully. Please configure the Microsoft Graph application permissions and update the automation account with the provided credentials. See the implementation guide for detailed post-deployment steps."
+        }
+    }
+}

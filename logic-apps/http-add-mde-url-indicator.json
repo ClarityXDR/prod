@@ -1,0 +1,105 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_entity_(URL)": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel_1']['connectionId']"
+                        }
+                    },
+                    "path": "/entity/@{encodeURIComponent('UrlEntity')}"
+                }
+            }
+        },
+        "actions": {
+            "Condition": {
+                "actions": {
+                    "Add_comment_to_incident_(V3)": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "body": {
+                                "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                "message": "<p>An AlertAndBlock request has been sent to the security centre API to block the URL: @{triggerBody()?['Entity']?['properties']?['Url']}. Note that the expiration time on this is 90 days.<br>\nThe response from the API was: @{outputs('HTTP_-_Alert_And_Block_URL')['statusCode']}</p>"
+                            },
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuresentinel_1']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "path": "/Incidents/Comment"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "HTTP_-_Alert_And_Block_URL": [
+                        "Succeeded"
+                    ]
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@triggerBody()?['IncidentArmID']",
+                                    "@null"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "type": "If"
+            },
+            "HTTP_-_Alert_And_Block_URL": {
+                "type": "Http",
+                "inputs": {
+                    "authentication": {
+                        "audience": "https://api.securitycenter.windows.com/",
+                        "type": "ManagedServiceIdentity"
+                    },
+                    "body": {
+                        "action": "AlertAndBlock",
+                        "application": "Microsoft Sentinel",
+                        "description": "This block command has been made through the Restrict-MDEUrl-entityTrigger. Ran on URL Entity from Microsoft Sentinel Incident with ARM ID: @{triggerBody()?['IncidentArmID']}. Entity properties: @{triggerBody()?['Entity']?['properties']}",
+                        "expirationTime": "@{addDays(utcNow(), 90)}",
+                        "indicatorType": "Url",
+                        "indicatorValue": "@{triggerBody()?['Entity']?['properties']?['Url']}",
+                        "title": "@{guid()}"
+                    },
+                    "method": "POST",
+                    "uri": "https://api.securitycenter.windows.com/api/indicators"
+                }
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel_1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/Azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "MicrosoftSentinel-Restrict-MDEUrl-entityTrigger",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

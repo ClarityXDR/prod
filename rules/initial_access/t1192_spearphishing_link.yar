@@ -1,0 +1,29 @@
+// filepath: rules/initial_access/t1192_spearphishing_link.yar
+rule: SpearphishingLink
+meta:
+  title: "Spearphishing Link (T1192)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1192"]
+  severity: "high"
+  description: "Detects clicks on suspicious links in emails, indicating possible spearphishing attempts."
+tables:
+  primary: "UrlClickEvents"
+detection:
+  selection:
+    ThreatTypes|in~:
+      - "Phishing"
+      - "Malware"
+      - "Suspicious"
+    IsClickedThrough|==: true
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "UserId"
+output:
+  required_columns: ["Timestamp", "UserId", "UserPrincipalName", "Url", "IPAddress"]
+  entity_columns: []

@@ -1,0 +1,75 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "recurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "Pacific Standard Time",
+                    "schedule": {
+                        "hours": [
+                            21
+                        ],
+                        "minutes": [
+                            0
+                        ]
+                    }
+                },
+                "evaluatedRecurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "Pacific Standard Time",
+                    "schedule": {
+                        "hours": [
+                            21
+                        ],
+                        "minutes": [
+                            0
+                        ]
+                    }
+                },
+                "type": "Recurrence"
+            }
+        },
+        "actions": {
+            "Post_message_in_a_chat_or_channel": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['teams']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "recipient": "19:meeting_ODAwMGRkNWUtZTA5ZC00NjcwLTk1OGItYzI5ZTgyMWVkYTVi@thread.v2",
+                        "messageBody": "<div style=\"font-family: Arial, sans-serif; line-height: 1.5; color: #323130;\"><div style=\"background: #d13438; color: white; padding: 10px; border-radius: 4px; margin-bottom: 12px;\"><h2 style=\"margin: 0; font-size: 16px;\">🚨 CYBER SECURITY HANDOVER - INDIA TEAM</h2></div><div style=\"background: #f3f2f1; padding: 10px; border-left: 4px solid #0078d4; margin-bottom: 12px;\"><strong>Daily 9 PM Handover - Take over for any cyber security events</strong></div><h3 style=\"color: #0078d4; margin: 12px 0 8px 0;\">📞 CONTACT INFORMATION</h3><div style=\"background: #fff4ce; padding: 8px; border-radius: 4px; margin-bottom: 12px;\"><strong>IT Service Desk:</strong><ul style=\"margin: 4px 0;\"><li><strong>US:</strong> 510-408-5555</li><li><strong>EU/APAC:</strong> +33 1 4701 5555</li></ul><strong>Global Information Security:</strong><ul style=\"margin: 4px 0;\"><li><strong>Germany:</strong> +49-6103 3130 555</li><li><strong>India (Gurgaon/Mumbai):</strong> +91-124-4029355</li></ul><p><strong>📋 Intranet Contacts:</strong> <a href=\"https://biorad.sharepoint.com/:u:/r/sites/KnowledgeBaseManagementSystem/SitePages/KB0011339.aspx?csf=1&amp;web=1&amp;e=gsfxgp\">Contact Directory</a></p></div><h3 style=\"color: #0078d4; margin: 12px 0 8px 0;\">🛡️ SERVER COMPROMISE PROTOCOL</h3><div style=\"background: #fff4ce; padding: 8px; border-radius: 4px; margin-bottom: 12px;\"><strong>Steps:</strong><ol style=\"margin: 4px 0;\"><li>Contact IT Service Desk → Create JSM ticket</li><li>Request IC on duty → Initiate P2 call</li><li>IC brings: Infra Windows/Linux, Network, AD teams</li></ol></div><h3 style=\"color: #d13438; margin: 12px 0 8px 0;\">💻 PC/LAPTOP COMPROMISE - IMMEDIATE ACTIONS</h3><div style=\"background: #fde7e9; padding: 8px; border-radius: 4px; border: 2px solid #d13438;\"><ol style=\"margin: 4px 0; font-weight: bold;\"><li>🔒 Isolate machine</li><li>❌ Revoke active session (AD team/Service Desk)</li><li>🔑 Reset password</li><li>📢 Notify Service Desk of isolation</li></ol><p style=\"color: #d13438; font-weight: bold; margin: 8px 0 4px 0;\">⚠️ CRITICAL: Session revocation must be done IMMEDIATELY - active sessions continue after password reset!</p></div><div style=\"text-align: center; padding: 8px; background: #f8f8f8; border-radius: 4px; margin-top: 12px;\"><small><em>Updated: June 29, 2025</em></small></div></div>"
+                    },
+                    "path": "/beta/teams/conversation/message/poster/Flow bot/location/@{encodeURIComponent('Group chat')}"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "teams": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/teams",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "teams"
+                }
+            }
+        }
+    }
+}

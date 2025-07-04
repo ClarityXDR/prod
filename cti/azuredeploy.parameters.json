@@ -1,0 +1,33 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "projectName": {
+            "value": "CTI"
+        },
+        "sentinelWorkspaceId": {
+            "value": "YOUR_SENTINEL_WORKSPACE_ID"
+        },
+        "sentinelWorkspaceKey": {
+            "value": "YOUR_SENTINEL_WORKSPACE_KEY"
+        },
+        "exchangeCredentialUsername": {
+            "value": "cti-service@yourdomain.com"
+        },
+        "exchangeCredentialPassword": {
+            "value": "YOUR_EXCHANGE_PASSWORD"
+        },
+        "graphAppId": {
+            "value": "YOUR_GRAPH_APP_ID"
+        },
+        "graphClientSecret": {
+            "value": "YOUR_GRAPH_CLIENT_SECRET"
+        },
+        "tenantId": {
+            "value": "YOUR_TENANT_ID"
+        },
+        "virusTotalApiKey": {
+            "value": ""
+        }
+    }
+}

@@ -1,0 +1,32 @@
+rule: DetectClipboardAccessForDataCollection
+meta:
+  title: "Detect clipboard access for potential data collection"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: []
+  severity: "medium"
+  description: "Detects suspicious clipboard access via clip.exe or PowerShell Get-Clipboard. Edit process names as needed."
+  references: []
+
+tables:
+  primary: "DeviceProcessEvents"
+
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "clip.exe"
+      - "powershell Get-Clipboard"
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine", "InitiatingProcessAccountName"]
+  entity_columns: []

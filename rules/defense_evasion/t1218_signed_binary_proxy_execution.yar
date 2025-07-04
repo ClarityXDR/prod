@@ -1,0 +1,28 @@
+rule: SignedBinaryProxyExecution
+meta:
+  title: "Signed Binary Proxy Execution (T1218)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1218"]
+  severity: "medium"
+  description: "Detects suspicious use of signed Windows utilities (LOLbins) for proxy execution."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "rundll32.exe"
+      - "regsvr32.exe"
+      - "mshta.exe"
+      - "wmic.exe"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine"]
+  entity_columns: []

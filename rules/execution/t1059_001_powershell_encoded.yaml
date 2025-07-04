@@ -1,0 +1,27 @@
+rule: PowerShellEncodedCommand
+meta:
+  title: "Encoded PowerShell Command Execution"
+  author: "SOC Team"
+  date: "2025-01-01"
+  mitre_techniques: ["T1059.001"]
+  severity: "medium"
+  description: "Detects execution of encoded PowerShell commands often used by attackers"
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    FileName|endswith: "powershell.exe"
+    ProcessCommandLine|contains:
+      - "-EncodedCommand"
+      - "-enc"
+      - "-e "
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceId", "ReportId"]
+  entity_columns: ["AccountName", "ProcessCommandLine", "InitiatingProcessFileName"]

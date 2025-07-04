@@ -1,0 +1,32 @@
+:root {
+  --bg: #0A0E23;       /* Darkblue */
+  --teal: #0083A8;     /* Teal */
+  --lime: #7CDB46;     /* Lime Green */
+  --orange: #FF4500;   /* Blaze Orange */
+  --white: #F5F7FA;    /* Cool Light */
+  --menu: #417a4b;     /* Cadetblue */
+  --blur: 100px;
+  --sidebar-width: 100px;
+}
+
+*,*::before,*::after { 
+  box-sizing: border-box; 
+}
+
+body {
+  margin: 0;
+  font: normal 75% Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--white);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+canvas { 
+  display: block; 
+}
+
+@keyframes pulse { 
+  0%,100%{box-shadow:0 0 30px 5px var(--lime),0 0 20px 10px var(--orange);}
+  50%{box-shadow:0 0 60px 15px var(--lime),0 0 40px 20px var(--orange);}
+}

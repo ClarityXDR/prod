@@ -1,0 +1,257 @@
+# ClarityXDR All-in-One Docker Image
+# This creates a single container with everything needed for a demo deployment
+
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    postgresql-14 \
+    nginx \
+    supervisor \
+    curl \
+    git \
+    golang-go \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy application files (or download them)
+# For demo, we'll create minimal versions inline
+
+# Create backend main.go
+RUN mkdir -p backend/cmd/server && cat > backend/cmd/server/main.go << 'EOF'
+package main
+
+import (
+    "encoding/json"
+    "log"
+    "net/http"
+    "time"
+)
+
+func main() {
+    http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "healthy",
+            "service": "clarityxdr-backend",
+            "time": time.Now().Format(time.RFC3339),
+        })
+    })
+
+    http.HandleFunc("/api/threats/count", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]int{"count": 1542})
+    })
+
+    http.HandleFunc("/api/queries", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{
+            "success": "true",
+            "message": "Query received",
+        })
+    })
+
+    http.HandleFunc("/api/contact", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]string{
+            "success": "true",
+            "message": "Contact message received",
+        })
+    })
+
+    log.Println("Backend server starting on :8080")
+    if err := http.ListenAndServe(":8080", nil); err != nil {
+        log.Fatal(err)
+    }
+}
+EOF
+
+# Create go.mod
+RUN cd backend && go mod init clarityxdr/backend
+
+# Create minimal React frontend
+RUN mkdir -p frontend && cd frontend && \
+    npm init -y && \
+    npm install react react-dom react-scripts
+
+# Create frontend index.html
+RUN mkdir -p frontend/public && cat > frontend/public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClarityXDR</title>
+</head>
+<body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+</body>
+</html>
+EOF
+
+# Create frontend App.js
+RUN mkdir -p frontend/src && cat > frontend/src/App.js << 'EOF'
+import React, { useState, useEffect } from 'react';
+
+function App() {
+    const [threatCount, setThreatCount] = useState(1542);
+
+    useEffect(() => {
+        fetch('/api/threats/count')
+            .then(res => res.json())
+            .then(data => setThreatCount(data.count))
+            .catch(console.error);
+    }, []);
+
+    return (
+        <div style={{
+            backgroundColor: '#0A0E23',
+            color: '#F5F7FA',
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'Arial, sans-serif'
+        }}>
+            <h1>
+                <span style={{color: '#F5F7FA'}}>Clarity</span>
+                <span style={{color: '#FF4500'}}>XDR</span>
+            </h1>
+            <p style={{color: '#7CDB46'}}>Architected by Humans</p>
+            <p style={{color: '#FF4500'}}>Operated by AI and ML</p>
+            <p>Threats analyzed: {threatCount.toLocaleString()}</p>
+            <div style={{marginTop: '2rem'}}>
+                <button style={{
+                    padding: '0.75rem 1.5rem',
+                    margin: '0 0.5rem',
+                    border: '2px solid #7CDB46',
+                    borderRadius: '30px',
+                    backgroundColor: '#7CDB46',
+                    color: '#0A0E23',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                }}>Get Started</button>
+                <button style={{
+                    padding: '0.75rem 1.5rem',
+                    margin: '0 0.5rem',
+                    border: '2px solid #FF4500',
+                    borderRadius: '30px',
+                    backgroundColor: 'transparent',
+                    color: '#FF4500',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                }}>Learn More</button>
+            </div>
+        </div>
+    );
+}
+
+export default App;
+EOF
+
+# Create index.js
+RUN cat > frontend/src/index.js << 'EOF'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+EOF
+
+# Build frontend
+RUN cd frontend && npm run build
+
+# Configure nginx
+RUN cat > /etc/nginx/sites-available/default << 'EOF'
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /app/frontend/build;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /health {
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+# Configure PostgreSQL
+RUN echo "host all all 0.0.0.0/0 md5" >> /etc/postgresql/14/main/pg_hba.conf && \
+    echo "listen_addresses='*'" >> /etc/postgresql/14/main/postgresql.conf
+
+# Create supervisord configuration
+RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+
+[program:postgresql]
+command=/usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf
+user=postgres
+autostart=true
+autorestart=true
+
+[program:nginx]
+command=/usr/sbin/nginx -g "daemon off;"
+autostart=true
+autorestart=true
+
+[program:backend]
+command=/usr/bin/go run /app/backend/cmd/server/main.go
+directory=/app/backend
+autostart=true
+autorestart=true
+environment=DB_HOST="localhost",DB_PORT="5432",DB_USER="postgres",DB_PASSWORD="postgres",DB_NAME="clarityxdr"
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+
+# Create startup script
+RUN cat > /start.sh << 'EOF'
+#!/bin/bash
+# Initialize PostgreSQL
+service postgresql start
+sudo -u postgres psql -c "CREATE DATABASE clarityxdr;"
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+# Start supervisord
+/usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+EOF
+
+RUN chmod +x /start.sh
+
+# Expose ports
+EXPOSE 80 443 5432 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start services
+CMD ["/start.sh"]

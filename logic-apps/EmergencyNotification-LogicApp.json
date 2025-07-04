@@ -1,0 +1,414 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_new_email_arrives_(V3)": {
+                "recurrence": {
+                    "frequency": "Minute",
+                    "interval": 3,
+                    "timeZone": "Pacific Standard Time"
+                },
+                "evaluatedRecurrence": {
+                    "frequency": "Minute",
+                    "interval": 3,
+                    "timeZone": "Pacific Standard Time"
+                },
+                "splitOn": "@triggerBody()?['value']",
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/v2/Mail/OnNewEmail",
+                    "queries": {
+                        "importance": "High",
+                        "fetchOnlyWithAttachment": false,
+                        "includeAttachments": false,
+                        "folderPath": "Inbox"
+                    }
+                }
+            }
+        },
+        "actions": {
+            "Initialize_Priority_Variable": {
+                "runAfter": {},
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "priorityLevel",
+                            "type": "string",
+                            "value": "P3"
+                        }
+                    ]
+                }
+            },
+            "Initialize_Retry_Count": {
+                "runAfter": {
+                    "Initialize_Priority_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "retryCount",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                }
+            },
+            "Initialize_Temp_Counter": {
+                "runAfter": {
+                    "Initialize_Retry_Count": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "tempCounter",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                }
+            },
+            "Initialize_Acknowledged": {
+                "runAfter": {
+                    "Initialize_Temp_Counter": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "acknowledged",
+                            "type": "boolean",
+                            "value": false
+                        }
+                    ]
+                }
+            },
+            "Condition": {
+                "actions": {
+                    "Check_Priority_Level": {
+                        "actions": {
+                            "Set_Priority_Variable": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "priorityLevel",
+                                    "value": "@if(contains(triggerBody()?['subject'], '[P1]'), 'P1', 'P2')"
+                                }
+                            },
+                            "High_Priority_Email_Notification": {
+                                "runAfter": {
+                                    "Set_Priority_Variable": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "To": "admin@company.com",
+                                        "Subject": "URGENT ALERT @{if(equals(variables('priorityLevel'), 'P1'), '🚨 URGENT P1: ', '⚠️ P2 Alert: ')}@{triggerBody()?['subject']}",
+                                        "Body": "<p>@{if(equals(variables('priorityLevel'), 'P1'), '<strong style=\"color:red\">⚠️ HIGHEST PRIORITY - REQUIRES IMMEDIATE ACTION ⚠️</strong><br><br>', '<strong style=\"color:orange\">⚠️ HIGH PRIORITY ⚠️</strong><br><br>')}@{triggerBody()?['body']}</p>",
+                                        "Importance": "High"
+                                    },
+                                    "path": "/v2/Mail"
+                                }
+                            },
+                            "Until_Acknowledged": {
+                                "actions": {
+                                    "Set_Temp_Counter": {
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                            "name": "tempCounter",
+                                            "value": "@add(variables('retryCount'), 1)"
+                                        }
+                                    },
+                                    "Increment_Retry_Count": {
+                                        "runAfter": {
+                                            "Set_Temp_Counter": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                            "name": "retryCount",
+                                            "value": "@variables('tempCounter')"
+                                        }
+                                    },
+                                    "Retry_Email_Notification": {
+                                        "runAfter": {
+                                            "Increment_Retry_Count": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "To": "admin@company.com",
+                                                "Subject": "@{if(equals(variables('priorityLevel'), 'P1'), concat('🚨 URGENT P1 - RETRY #', variables('retryCount'), ': '), concat('⚠️ P2 Alert - RETRY #', variables('retryCount'), ': '))}@{triggerBody()?['subject']}",
+                                                "Body": "<p>@{if(equals(variables('priorityLevel'), 'P1'), '<strong style=\"color:red\">⚠️ HIGHEST PRIORITY - REQUIRES IMMEDIATE ACTION ⚠️</strong><br><br>', concat('<strong style=\"color:orange\">⚠️ HIGH PRIORITY - RETRY #', variables('retryCount'), ' ⚠️</strong><br><br>'))}@{triggerBody()?['body']}</p>",
+                                                "Importance": "High"
+                                            },
+                                            "path": "/v2/Mail"
+                                        }
+                                    },
+                                    "Delay": {
+                                        "runAfter": {
+                                            "Retry_Email_Notification": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Wait",
+                                        "inputs": {
+                                            "interval": {
+                                                "count": 1,
+                                                "unit": "Minute"
+                                            }
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Set_Acknowledged_Variable": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "expression": "@or(equals(variables('acknowledged'), true), and(equals(variables('priorityLevel'), 'P2'), greaterOrEquals(variables('retryCount'), 5)), and(equals(variables('priorityLevel'), 'P1'), greaterOrEquals(variables('retryCount'), 60)))",
+                                "limit": {
+                                    "count": 60,
+                                    "timeout": "PT12H"
+                                },
+                                "type": "Until"
+                            },
+                            "Post_adaptive_card_and_wait_for_a_response": {
+                                "runAfter": {
+                                    "Compose": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnectionWebhook",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['teams']['connectionId']"
+                                        }
+                                    },
+                                    "body": {
+                                        "notificationUrl": "@listCallbackUrl()",
+                                        "body": {
+                                            "messageBody": "@{outputs('Compose')}",
+                                            "recipient": {
+                                                "to": "admin@company.com"
+                                            }
+                                        }
+                                    },
+                                    "path": "/v1.0/teams/conversation/gatherinput/poster/Flow bot/location/@{encodeURIComponent('Chat with Flow bot')}/$subscriptions"
+                                }
+                            },
+                            "Set_Acknowledged_Variable": {
+                                "runAfter": {
+                                    "Post_adaptive_card_and_wait_for_a_response": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "acknowledged",
+                                    "value": "@outputs('Post_adaptive_card_and_wait_for_a_response')?['body']?['data']?['acknowledged']"
+                                }
+                            },
+                            "Compose": {
+                                "runAfter": {
+                                    "High_Priority_Email_Notification": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Compose",
+                                "inputs": {
+                                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                                    "type": "AdaptiveCard",
+                                    "version": "1.2",
+                                    "body": [
+                                        {
+                                            "type": "Container",
+                                            "style": "attention",
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "size": "Large",
+                                                    "weight": "Bolder",
+                                                    "text": "@{if(equals(variables('priorityLevel'), 'P1'), '🚨 URGENT P1 ALERT', if(equals(variables('priorityLevel'), 'P2'), '⚠️ P2 ALERT', 'LIMS NOTIFICATION'))}",
+                                                    "color": "Attention",
+                                                    "horizontalAlignment": "Center"
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "type": "Container",
+                                            "spacing": "Medium",
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "**Subject:**",
+                                                    "weight": "Bolder",
+                                                    "size": "Medium",
+                                                    "spacing": "Medium"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "@{triggerBody()?['subject']}",
+                                                    "wrap": true,
+                                                    "size": "Medium"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "**Message:**",
+                                                    "weight": "Bolder",
+                                                    "size": "Medium",
+                                                    "spacing": "Medium"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "@{replace(replace(replace(triggerBody()?['body'], '<p>', ''), '</p>', ''), '<br>', '\n')}",
+                                                    "wrap": true,
+                                                    "spacing": "Small"
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "type": "Container",
+                                            "spacing": "Medium",
+                                            "items": [
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "**Priority Level:** @{variables('priorityLevel')",
+                                                    "weight": "Bolder",
+                                                    "color": "@{if(equals(variables('priorityLevel'), 'P1'), 'Attention', if(equals(variables('priorityLevel'), 'P2'), 'Warning', 'Default'))}"
+                                                },
+                                                {
+                                                    "type": "TextBlock",
+                                                    "text": "**Retry Count:** @{variables('retryCount')",
+                                                    "weight": "Bolder",
+                                                    "isVisible": "@{greater(variables('retryCount'), 0)}"
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "actions": [
+                                        {
+                                            "type": "Action.Submit",
+                                            "title": "🔴 ACKNOWLEDGE ALERT",
+                                            "data": {
+                                                "acknowledged": true
+                                            },
+                                            "style": "destructive"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "Standard_Priority_Email_Notification": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "To": "admin@company.com",
+                                            "Subject": "LIMS Notification: @{triggerBody()?['subject']}",
+                                            "Body": "<p>@{triggerBody()?['body']}</p>",
+                                            "Importance": "Normal"
+                                        },
+                                        "path": "/v2/Mail"
+                                    }
+                                }
+                            }
+                        },
+                        "expression": {
+                            "or": [
+                                {
+                                    "contains": [
+                                        "@triggerBody()?['subject']",
+                                        "P3"
+                                    ]
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_Acknowledged": [
+                        "Succeeded"
+                    ]
+                },
+                "else": {
+                    "actions": {}
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "startsWith": [
+                                "@triggerBody()?['subject']",
+                                "LIMS Emergency"
+                            ]
+                        }
+                    ]
+                },
+                "type": "If"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "office365-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "office365-connection"
+                },
+                "teams": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/teams",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "teams-connection"
+                }
+            }
+        }
+    }
+}

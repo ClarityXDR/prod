@@ -1,0 +1,39 @@
+rule: MimikatzDetection
+meta:
+  title: "Mimikatz Credential Dumping Detection"
+  author: "Security Team"
+  date: "2024-01-01"
+  mitre_techniques: ["T1003.001", "T1003.002"]
+  severity: "high"
+  description: "Detects Mimikatz credential dumping activity"
+  references:
+    - "https://attack.mitre.org/techniques/T1003/"
+
+tables:
+  primary: "DeviceProcessEvents"
+  secondary: ["DeviceFileEvents", "DeviceNetworkEvents"]
+
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "mimikatz.exe"
+      - "sekurlsa::logonpasswords"
+      - "lsadump::sam"
+  filter:
+    InitiatingProcessFileName|not_contains:
+      - "System"
+
+timeframe: "30d"
+frequency: "1h"
+condition: "selection and not filter"
+
+response:
+  actions:
+    - type: "isolate_device"
+      target: "DeviceId"
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["Timestamp", "DeviceId", "ReportId"]
+  entity_columns: ["DeviceId", "AccountName", "ProcessCommandLine"]

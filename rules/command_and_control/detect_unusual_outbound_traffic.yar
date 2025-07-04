@@ -1,0 +1,31 @@
+rule: DetectUnusualOutboundTraffic
+meta:
+  title: "Detect unusual outbound traffic"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: ["T1071"]
+  severity: "medium"
+  description: "Identifies outbound traffic to public IPs on non-standard ports (>1024). Adjust as needed."
+  references: []
+
+tables:
+  primary: "DeviceNetworkEvents"
+
+detection:
+  selection:
+    RemoteIP|matches regex: "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    RemotePort|>: 1024
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["Timestamp", "DeviceName", "RemoteIP", "RemotePort"]
+  entity_columns: []

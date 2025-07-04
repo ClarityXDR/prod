@@ -1,0 +1,152 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "For_each_IP": {
+                "foreach": "@body('Entities_-_Get_IPs')?['IPs']",
+                "actions": {
+                    "HTTP_Query_Criminal_IP": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "https://api.criminalip.io/v1/asset/ip/report/summary?ip=@{items('For_each_IP')}",
+                            "method": "GET",
+                            "headers": {
+                                "x-api-key": "@{parameters('CriminalIPApiKey')}"
+                            }
+                        }
+                    },
+                    "Parse_Criminal_IP_Response": {
+                        "runAfter": {
+                            "HTTP_Query_Criminal_IP": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@body('HTTP_Query_Criminal_IP')",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "status": {
+                                        "type": "string"
+                                    },
+                                    "data": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "Create_HTML_Table_for_Incident_Comment": {
+                        "runAfter": {
+                            "Parse_Criminal_IP_Response": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose",
+                        "inputs": "<table border=1><tr><th>IP</th><th>Risk Score</th><th>Country</th><th>ISP</th><th>Last Seen</th></tr><tr><td></td><td>@{body('Parse_Criminal_IP_Response')?['data']?['score']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['country_name']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['isp']}</td><td>@{body('Parse_Criminal_IP_Response')?['data']?['updated_at']}</td></tr></table>"
+                    },
+                    "Add_comment_to_incident_(V3)": {
+                        "runAfter": {
+                            "Create_HTML_Table_for_Incident_Comment": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "incidentArmId": "@triggerBody()?['object']?['id']",
+                                "message": "<p>@{outputs('Create_HTML_Table_for_Incident_Comment')}</p>"
+                            },
+                            "path": "/Incidents/Comment"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_IPs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Entities_-_Get_IPs": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/ip"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "CriminalIPApiKey": {
+                "defaultValue": "",
+                "type": "String"
+            },
+            "LogAnalyticsWorkspaceId": {
+                "defaultValue": "",
+                "type": "String"
+            },
+            "TableName": {
+                "defaultValue": "CriminalIPData",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-AiTM_Response",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                }
+            }
+        }
+    }
+}

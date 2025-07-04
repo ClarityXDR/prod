@@ -1,0 +1,535 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "Entities_-_Get_Accounts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/account"
+                }
+            },
+            "For_each": {
+                "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                "actions": {
+                    "Compose_-_Adaptive_card_body": {
+                        "runAfter": {
+                            "Get_risky_user": [
+                                "Succeeded",
+                                "Failed"
+                            ]
+                        },
+                        "type": "Compose",
+                        "inputs": {
+                            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                            "actions": [
+                                {
+                                    "data": {
+                                        "x": "confirm"
+                                    },
+                                    "title": "Confirm user as compromised",
+                                    "type": "Action.Submit"
+                                },
+                                {
+                                    "data": {
+                                        "x": "dismiss"
+                                    },
+                                    "title": "Dismiss the risky user",
+                                    "type": "Action.Submit"
+                                },
+                                {
+                                    "data": {
+                                        "x": "ignore"
+                                    },
+                                    "title": "Ignore",
+                                    "type": "Action.Submit"
+                                }
+                            ],
+                            "body": [
+                                {
+                                    "size": "large",
+                                    "text": "@{triggerBody()?['object']?['properties']?['title']}",
+                                    "type": "TextBlock",
+                                    "weight": "bolder"
+                                },
+                                {
+                                    "spacing": "Medium",
+                                    "text": "Incident @{triggerBody()?['object']?['properties']?['incidentNumber']}, created by the provider:@{join(triggerBody()?['object']?['properties']?['additionalData']?['alertProductNames'], ',')}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "text": "[[Click here to view the Incident](@{triggerBody()?['object']?['properties']?['incidentUrl']})",
+                                    "type": "TextBlock",
+                                    "wrap": true
+                                },
+                                {
+                                    "size": "Large",
+                                    "spacing": "Medium",
+                                    "text": "Microsoft Entra ID Protection Risky user info:",
+                                    "type": "TextBlock",
+                                    "weight": "Bolder"
+                                },
+                                {
+                                    "text": "Risky user display name: @{body('Get_risky_user')?['userDisplayName']}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "text": "Risky user principal name: @{body('Get_risky_user')?['userPrincipalName']}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "text": "Risk detail: @{body('Get_risky_user')?['riskDetail']}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "text": "Risk state: @{body('Get_risky_user')?['riskState']}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "text": "User risk level:  @{body('Get_risky_user')?['riskLevel']}",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "size": "Large",
+                                    "spacing": "Large",
+                                    "text": "Respond:",
+                                    "type": "TextBlock",
+                                    "weight": "Bolder"
+                                },
+                                {
+                                    "size": "Small",
+                                    "style": "Person",
+                                    "type": "Image",
+                                    "url": "https://connectoricons-prod.azureedge.net/releases/v1.0.1391/1.0.1391.2130/azuresentinel/icon.png"
+                                },
+                                {
+                                    "text": "Close Microsoft Sentinel incident?",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "choices": [
+                                        {
+                                            "isSelected": true,
+                                            "title": "Close incident - False Positive",
+                                            "value": "FalsePositive"
+                                        },
+                                        {
+                                            "title": "Close incident - True Positive",
+                                            "value": "TruePositive"
+                                        },
+                                        {
+                                            "title": "Close incident - Benign Positive",
+                                            "value": "BenignPositive"
+                                        },
+                                        {
+                                            "title": "No",
+                                            "value": "no"
+                                        }
+                                    ],
+                                    "id": "incidentStatus",
+                                    "style": "compact",
+                                    "type": "Input.ChoiceSet",
+                                    "value": "BenignPositive"
+                                },
+                                {
+                                    "text": "Change Microsoft Sentinel incident severity?",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "choices": [
+                                        {
+                                            "isSelected": true,
+                                            "title": "High",
+                                            "value": "High"
+                                        },
+                                        {
+                                            "title": "Medium",
+                                            "value": "Medium"
+                                        },
+                                        {
+                                            "title": "Low",
+                                            "value": "Low"
+                                        },
+                                        {
+                                            "title": "Don't change",
+                                            "value": "same"
+                                        }
+                                    ],
+                                    "id": "incidentSeverity",
+                                    "style": "compact",
+                                    "type": "Input.ChoiceSet",
+                                    "value": "High"
+                                },
+                                {
+                                    "text": "Respose in Identity Protection:",
+                                    "type": "TextBlock"
+                                },
+                                {
+                                    "size": "Small",
+                                    "style": "Person",
+                                    "type": "Image",
+                                    "url": "https://connectoricons-prod.azureedge.net/releases/v1.0.1400/1.0.1400.2154/azureadip/icon.png"
+                                }
+                            ],
+                            "type": "AdaptiveCard",
+                            "version": "1.0"
+                        }
+                    },
+                    "Condition_-_Change_Severity": {
+                        "actions": {
+                            "Update_incident_2": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "put",
+                                    "body": {
+                                        "incidentArmId": "@body('Update_incident')?['id']",
+                                        "severity": "@{body('Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response')?['data']?['incidentSeverity']}"
+                                    },
+                                    "path": "/Incidents"
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Condition_-_Close_incident": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@body('Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response')?['data']?['incidentSeverity']",
+                                            "same"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "type": "If",
+                        "description": "True if user chose to change severity, else False"
+                    },
+                    "Condition_-_Close_incident": {
+                        "actions": {
+                            "Update_incident": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "put",
+                                    "body": {
+                                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                                        "status": "Closed",
+                                        "classification": {
+                                            "ClassificationAndReason": "@{body('Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response')?['data']?['incidentStatus']}",
+                                            "ClassificationReasonText": "User choice in Sentinel-Microsoft Entra ID Protection playbook"
+                                        }
+                                    },
+                                    "path": "/Incidents"
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Switch": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@body('Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response')?['data']?['incidentStatus']",
+                                            "no"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "type": "If",
+                        "description": "True if user chose to close the incident, else False"
+                    },
+                    "Get_risky_user": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azureadip-1']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/beta/riskyUsers/@{encodeURIComponent(items('For_each')?['AadUserId'])}"
+                        },
+                        "description": "This action uses the Microsoft Entra ID user id field in the Account entity. It asks Microsoft Entra ID Protection for the risky user object. This action fails if no risky user found, "
+                    },
+                    "Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response": {
+                        "runAfter": {
+                            "Compose_-_Adaptive_card_body": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnectionWebhook",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['teams-1']['connectionId']"
+                                }
+                            },
+                            "body": {
+                                "body": {
+                                    "recipient": {
+                                        "channelId": "19:00000000000000000000000000000000@thread.tacv2"
+                                    },
+                                    "messageBody": "@{outputs('Compose_-_Adaptive_card_body')}",
+                                    "shouldUpdateCard": true
+                                },
+                                "notificationUrl": "@{listCallbackUrl()}"
+                            },
+                            "path": "/flowbot/actions/flowcontinuation/recipienttypes/channel/$subscriptions",
+                            "queries": {
+                                "groupId": "976226c0-a7cb-497d-961d-e12dd55d21ff"
+                            }
+                        }
+                    },
+                    "Switch": {
+                        "runAfter": {
+                            "Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response": [
+                                "Succeeded"
+                            ]
+                        },
+                        "cases": {
+                            "Case_-_confirm": {
+                                "case": "confirm",
+                                "actions": {
+                                    "Add_comment_to_incident_(V3)_2": {
+                                        "runAfter": {
+                                            "Compose_HTML_comment_(confirm)": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                "message": "<p>@{outputs('Compose_HTML_comment_(confirm)')}</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        }
+                                    },
+                                    "Compose_HTML_comment_(confirm)": {
+                                        "runAfter": {
+                                            "Get_risky_user_2": [
+                                                "Succeeded",
+                                                "Failed"
+                                            ]
+                                        },
+                                        "type": "Compose",
+                                        "inputs": " ** Sentinel to Microsoft Entra ID Protection - Response from Teams playbook update **\n\n<img src = 'https://connectoricons-prod.azureedge.net/releases/v1.0.1400/1.0.1400.2154/azureadip/icon.png' width=\"40\"><h2>Microsoft Entra ID Protection</h2>\n\n<h3> The user @{body('Get_risky_user_2')?['userDisplayName']} was confirmed as compromised.</h3>\n\n<h4> Update risky user information from Microsoft Entra ID Protection:\n\n<li> risk detail: @{body('Get_risky_user_2')?['riskDetail']}</li>\n<li> risk level:@{body('Get_risky_user_2')?['riskLevel']}</li>\n<li> risk state: @{body('Get_risky_user_2')?['riskState']}</li>\n<li> risk last update time: @{body('Get_risky_user_2')?['riskLastUpdatedDateTime']}</li>"
+                                    },
+                                    "Confirm_a_risky_user_as_compromised": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azureadip-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "userIds": [
+                                                    "@items('For_each')?['AadUserId']"
+                                                ]
+                                            },
+                                            "path": "/beta/riskyUsers/confirmCompromised"
+                                        }
+                                    },
+                                    "Get_risky_user_2": {
+                                        "runAfter": {
+                                            "Confirm_a_risky_user_as_compromised": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azureadip-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "get",
+                                            "path": "/beta/riskyUsers/@{encodeURIComponent(items('For_each')?['AadUserId'])}"
+                                        }
+                                    }
+                                }
+                            },
+                            "Case_-_dismiss": {
+                                "case": "dismiss",
+                                "actions": {
+                                    "Add_comment_to_incident_(V3)": {
+                                        "runAfter": {
+                                            "Compose_HTML_comment_(dismiss)": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                "message": "<p>@{outputs('Compose_HTML_comment_(dismiss)')}</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        }
+                                    },
+                                    "Compose_HTML_comment_(dismiss)": {
+                                        "runAfter": {
+                                            "Get_risky_user_3": [
+                                                "Succeeded",
+                                                "Failed"
+                                            ]
+                                        },
+                                        "type": "Compose",
+                                        "inputs": "** Sentinel to Microsoft Entra ID Protection - Response from Teams playbook update **\n\n<img src = 'https://connectoricons-prod.azureedge.net/releases/v1.0.1400/1.0.1400.2154/azureadip/icon.png' width=\"40\"><h2>Microsoft Entra ID Protection</h2>\n\n<h3> The user @{body('Get_risky_user_3')?['userDisplayName']} was dismissed. </h3>\n<h4>Updated risky user information from Microsoft Entra ID Protection:\n<li> risk detail: @{body('Get_risky_user_3')?['riskDetail']}</li>\n<li> risk level:  @{body('Get_risky_user_3')?['riskLevel']}</li>\n<li> risk state:  @{body('Get_risky_user_3')?['riskState']}</li>\n<li> risk last update time:  @{body('Get_risky_user_3')?['riskLastUpdatedDateTime']}</li>"
+                                    },
+                                    "Dismiss_a_risky_user": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azureadip-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "userIds": [
+                                                    "@body('Get_risky_user')?['id']"
+                                                ]
+                                            },
+                                            "path": "/beta/riskyUsers/dismiss"
+                                        }
+                                    },
+                                    "Get_risky_user_3": {
+                                        "runAfter": {
+                                            "Dismiss_a_risky_user": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azureadip-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "get",
+                                            "path": "/beta/riskyUsers/@{encodeURIComponent(items('For_each')?['AadUserId'])}"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "default": {
+                            "actions": {}
+                        },
+                        "expression": "@body('Post_an_Adaptive_Card_to_a_Teams_channel_and_wait_for_a_response')?['data']?['x']",
+                        "type": "Switch"
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_Accounts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach",
+                "description": "This loop iterates the accounts found in the alert",
+                "runtimeConfiguration": {
+                    "concurrency": {
+                        "repetitions": 1
+                    }
+                }
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-MSSentinelAlert",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azureadip-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azureadip",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azureadip-1"
+                },
+                "teams-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/teams",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "teams-connection"
+                }
+            }
+        }
+    }
+}

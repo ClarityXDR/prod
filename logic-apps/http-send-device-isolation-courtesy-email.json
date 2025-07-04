@@ -1,0 +1,339 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "Entities_-_Get_Accounts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/account"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Initialize_LoggedOnUser_Variable": {
+                "runAfter": {
+                    "Entities_-_Get_Accounts": [
+                        "Succeeded",
+                        "Failed"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "LoggedOnUser",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Initialize_UserEmail_Variable": {
+                "runAfter": {
+                    "Initialize_LoggedOnUser_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "UserEmail",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Extract_LoggedOnUser": {
+                "runAfter": {
+                    "Initialize_UserEmail_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "LoggedOnUser",
+                    "value": "@if(and(not(empty(body('Entities_-_Get_Accounts')?['Accounts'])), not(empty(first(body('Entities_-_Get_Accounts')?['Accounts'])?['LoggedOnUsers']))), coalesce(first(first(body('Entities_-_Get_Accounts')?['Accounts'])?['LoggedOnUsers'])?['AccountName'], ''), 'SecurityTeam')"
+                }
+            },
+            "Build_Email_Address": {
+                "runAfter": {
+                    "Extract_LoggedOnUser": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "UserEmail",
+                    "value": "@{if(equals(variables('LoggedOnUser'), 'SecurityTeam'), 'securityteam@company.com', concat(variables('LoggedOnUser'), '@company.com'))}"
+                }
+            },
+            "Entities_-_Get_Hosts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/host"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Entities_-_Get_FileHashes": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/filehash"
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "ListofAlerts": {
+                "runAfter": {
+                    "Build_Email_Address": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AlertDescription",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                }
+            },
+            "Parse_Alert_JSON": {
+                "runAfter": {
+                    "ListofAlerts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@triggerBody()?['object']?['properties']?['Alerts']",
+                    "schema": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "properties": {
+                                    "type": "object",
+                                    "properties": {
+                                        "alertDisplayName": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "remediationSteps": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "severity": {
+                                            "type": "string"
+                                        },
+                                        "compromisedEntity": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "Format_Alert_Description": {
+                "runAfter": {
+                    "Parse_Alert_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose",
+                "inputs": "@if(equals(length(body('Parse_Alert_JSON')), 0), 'No alert details available', concat('<strong>Alert: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['alertDisplayName'], '<br/><br/><strong>Description: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['description'], '<br/><br/><strong>Severity: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['severity'], '<br/><br/><strong>Compromised Entity: </strong>', first(body('Parse_Alert_JSON'))?['properties']?['compromisedEntity'], '<br/><br/><strong>Remediation Steps:</strong><ol>', replace(string(first(body('Parse_Alert_JSON'))?['properties']?['remediationSteps']), ',', '</li><li>'), '</ol>'))"
+            },
+            "Set_Alert_Description_Variable": {
+                "runAfter": {
+                    "Format_Alert_Description": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable",
+                "inputs": {
+                    "name": "AlertDescription",
+                    "value": "@outputs('Format_Alert_Description')"
+                }
+            },
+            "Compose_Email_response": {
+                "runAfter": {
+                    "Entities_-_Get_Hosts": [
+                        "Succeeded",
+                        "Failed"
+                    ],
+                    "Entities_-_Get_FileHashes": [
+                        "Succeeded",
+                        "Failed"
+                    ],
+                    "Set_Alert_Description_Variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose",
+                "inputs": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body {\n            font-family: 'Segoe UI', Arial, Helvetica, sans-serif;\n            background-color: #f5f5f5;\n            margin: 0;\n            padding: 0;\n            color: #333;\n            line-height: 1.6;\n        }\n        .email-container {\n            max-width: 680px;\n            margin: 20px auto;\n            background-color: #ffffff;\n            border-radius: 12px;\n            box-shadow: 0 4px 20px rgba(0,0,0,0.08);\n            overflow: hidden;\n        }\n        .header {\n            background: linear-gradient(135deg, #C5203E 0%, #9a1a30 100%);\n            padding: 35px 30px;\n            text-align: center;\n            position: relative;\n        }\n        .header img {\n            max-height: 55px;\n            filter: brightness(0) invert(1);\n        }\n        .alert-banner {\n            background-color: #FFF3CD;\n            border-left: 5px solid #FFC107;\n            padding: 18px 25px;\n            margin: 0;\n            display: flex;\n            align-items: center;\n            box-shadow: 0 2px 5px rgba(0,0,0,0.05);\n        }\n        .alert-banner h2 {\n            color: #856404;\n            margin: 0;\n            font-size: 19px;\n            font-weight: 600;\n            letter-spacing: 0.3px;\n        }\n        .alert-banner h2 i {\n            margin-right: 8px;\n            font-size: 22px;\n        }\n        .content {\n            padding: 35px;\n            color: #333333;\n        }\n        .greeting {\n            font-size: 17px;\n            margin-bottom: 24px;\n            color: #222;\n        }\n        .section {\n            margin-bottom: 28px;\n            padding: 24px;\n            background-color: #f9f9fb;\n            border-radius: 10px;\n            border-left: 5px solid #C5203E;\n            box-shadow: 0 2px 8px rgba(0,0,0,0.03);\n            transition: all 0.3s ease;\n        }\n        .section:hover {\n            box-shadow: 0 4px 12px rgba(0,0,0,0.07);\n            transform: translateY(-2px);\n        }\n        .section-title {\n            color: #C5203E;\n            font-size: 19px;\n            font-weight: 600;\n            margin-bottom: 14px;\n            display: flex;\n            align-items: center;\n            letter-spacing: 0.3px;\n        }\n        .section-title i {\n            margin-right: 8px;\n        }\n        .detail-item {\n            margin: 10px 0;\n            padding-left: 22px;\n            border-bottom: 1px dashed rgba(0,0,0,0.08);\n            padding-bottom: 10px;\n        }\n        .detail-item:last-child {\n            border-bottom: none;\n        }\n        .detail-label {\n            font-weight: 600;\n            color: #555;\n            display: inline-block;\n            width: 120px;\n        }\n        .detail-value {\n            color: #333;\n            font-family: 'Courier New', monospace;\n            background-color: #f0f2f5;\n            padding: 3px 8px;\n            border-radius: 4px;\n            font-size: 14px;\n            border: 1px solid #e5e8ec;\n        }\n        .info-section {\n            background-color: #E8F4FE;\n            border-left: 5px solid #0073E6;\n        }\n        .action-section {\n            background-color: #E8F4FE;\n            border-left: 5px solid #0073E6;\n        }\n        .service-account-section {\n            background-color: #FFF8E1;\n            border-left: 5px solid #FF9800;\n        }\n        .steps-list {\n            margin: 18px 0;\n            padding-left: 25px;\n        }\n        .steps-list li {\n            margin: 12px 0;\n            color: #333;\n            padding-left: 5px;\n        }\n        .steps-list li strong {\n            background-color: rgba(0, 115, 230, 0.1);\n            padding: 2px 6px;\n            border-radius: 4px;\n        }\n        .important-note {\n            background-color: #FDEFF4;\n            border: 1px solid #F8BBD0;\n            border-radius: 10px;\n            padding: 18px;\n            margin: 24px 0;\n            position: relative;\n            box-shadow: 0 2px 8px rgba(0,0,0,0.04);\n        }\n        .important-note:before {\n            content: '⚠️';\n            position: absolute;\n            left: -12px;\n            top: 50%;\n            transform: translateY(-50%);\n            background: #fff;\n            width: 25px;\n            height: 25px;\n            border-radius: 50%;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border: 1px solid #F8BBD0;\n            font-size: 14px;\n        }\n        .important-note strong {\n            color: #C5203E;\n            display: block;\n            margin-bottom: 5px;\n            font-size: 15px;\n        }\n        .footer {\n            background: linear-gradient(to right, #f8f9fa, #f0f2f5);\n            padding: 28px;\n            text-align: center;\n            border-top: 1px solid #eaedf0;\n        }\n        .footer p {\n            margin: 5px 0;\n            color: #666;\n            font-size: 14px;\n        }\n        .signature {\n            margin-top: 32px;\n            padding-top: 24px;\n            border-top: 1px solid #eaedf0;\n            font-style: italic;\n        }\n        ul {\n            margin: 10px 0;\n        }\n        .btn-ticket {\n            display: inline-block;\n            background: linear-gradient(135deg, #0073E6 0%, #0059B2 100%);\n            color: white;\n            padding: 12px 24px;\n            text-decoration: none;\n            border-radius: 6px;\n            margin: 15px 0;\n            font-weight: 600;\n            text-align: center;\n            box-shadow: 0 2px 10px rgba(0,115,230,0.2);\n            transition: all 0.3s ease;\n        }\n        .btn-ticket:hover {\n            transform: translateY(-3px);\n            box-shadow: 0 5px 15px rgba(0,115,230,0.3);\n        }\n        .alert-icon {\n            font-size: 24px;\n            margin-right: 10px;\n        }\n        .step-container {\n            background-color: #f0f7ff;\n            border-radius: 8px;\n            padding: 18px;\n            margin: 15px 0;\n        }\n        .step-title {\n            font-weight: 600;\n            color: #0073E6;\n            margin-bottom: 10px;\n            display: flex;\n            align-items: center;\n        }\n        .step-title i {\n            margin-right: 8px;\n        }\n        .step-number {\n            display: inline-block;\n            width: 24px;\n            height: 24px;\n            background-color: #0073E6;\n            color: white;\n            border-radius: 50%;\n            text-align: center;\n            line-height: 24px;\n            margin-right: 10px;\n            font-weight: 600;\n            font-size: 14px;\n        }\n        .warning-alert {\n            background-color: #FFF3CD;\n            border-left: 5px solid #FFC107;\n        }\n    </style>\n</head>\n<body>\n    <div class=\"email-container\">\n        <div class=\"header\">\n            <img src=\"https://www.YourCompany.com/sites/default/files/2023-02/YourCompany-logo.svg\" alt=\"YourCompany Logo\">\n        </div>\n        \n        <div class=\"alert-banner\">\n            <h2>🔒 SECURITY NOTIFICATION - Active Directory Account Disabled</h2>\n        </div>\n        \n        <div class=\"content\">\n            <p class=\"greeting\">Dear Information Security Team,</p>\n            \n            <p>This is a courtesy notification regarding an Active Directory account that has been automatically disabled due to a security alert.</p>\n            \n            <div class=\"section warning-alert\">\n                <div class=\"section-title\">🚨 ACTION TAKEN</div>\n                <p><strong>An Active Directory account has been automatically disabled</strong> as a security precaution based on the security alert detailed below.</p>\n            </div>\n            \n            <div class=\"section\">\n                <div class=\"section-title\">📊 Account & Alert Details</div>\n                <p><strong>Security Alert:</strong> @{triggerBody()?['object']?['properties']?['title']}</p>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Affected Account:</span> <span class=\"detail-value\">@{if(empty(body('Entities_-_Get_Accounts')?['Accounts']), 'Unknown User', coalesce(first(body('Entities_-_Get_Accounts')?['Accounts'])?['Name'], first(body('Entities_-_Get_Accounts')?['Accounts'])?['UPNSuffix'], 'Unknown User'))}</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Associated Host:</span> <span class=\"detail-value\">@{if(empty(body('Entities_-_Get_Hosts')?['Hosts']), 'Unknown Host', coalesce(first(body('Entities_-_Get_Hosts')?['Hosts'])?['HostName'], first(body('Entities_-_Get_Hosts')?['Hosts'])?['DnsDomain'], 'Unknown Host'))}</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Alert Time:</span> <span class=\"detail-value\">@{formatDateTime(utcNow(), 'yyyy-MM-dd HH:mm:ss')} UTC</span>\n                </div>\n                <div class=\"detail-item\">\n                    <span class=\"detail-label\">Sentinel Incident:</span> <span class=\"detail-value\">@{triggerBody()?['object']?['properties']?['incidentNumber']}</span>\n                </div>\n            </div>\n            \n            <div class=\"section info-section\">\n                <div class=\"section-title\">⚠️ Alert Information</div>\n                <p><strong>Security Alert Details:</strong></p>\n                <p>@{variables('AlertDescription')}</p>\n                <p>@{coalesce(triggerBody()?['object']?['properties']?['description'], 'A security alert has triggered the automatic disabling of this Active Directory account as a precautionary measure.')}</p>\n            </div>\n            \n            <div class=\"section service-account-section\">\n                <div class=\"section-title\">🔧 Service Account Instructions</div>\n                <div class=\"important-note\">\n                    <strong>Special Notice for Service Accounts:</strong>\n                    <p>If the disabled account is a <strong>Service Account</strong> (account name starts with <strong>\"SVC\"</strong>), please follow these additional steps:</p>\n                </div>\n                <ol class=\"steps-list\">\n                    <li><strong>Identify the Server Team:</strong> Determine which server team is responsible for the affected asset/server</li>\n                    <li><strong>Forward This Email:</strong> Forward this entire email notification to the appropriate server team immediately</li>\n                    <li><strong>Service Impact Assessment:</strong> The server team should assess potential service disruptions caused by the disabled service account</li>\n                    <li><strong>Coordinate Recovery:</strong> Work with the server team to coordinate the security review and account recovery process</li>\n                </ol>\n            </div>\n            \n            <div class=\"section action-section\">\n                <div class=\"section-title\">✅ REQUIRED ACTIONS</div>\n                \n                <div class=\"step-container\">\n                    <div class=\"step-title\"><i>🔍</i> Immediate Assessment Required</div>\n                    <ol class=\"steps-list\">\n                        <li><span class=\"step-number\">1</span> <strong>Review the security alert</strong> and assess the threat level</li>\n                        <li><span class=\"step-number\">2</span> <strong>Investigate the incident</strong> using the Sentinel incident details provided</li>\n                        <li><span class=\"step-number\">3</span> <strong>Determine if this is a legitimate security threat</strong> or a false positive</li>\n                        <li><span class=\"step-number\">4</span> <strong>Check if the account is a service account</strong> (starts with \"SVC\") and follow service account procedures if applicable</li>\n                        <li><span class=\"step-number\">5</span> <strong>Document your findings</strong> in the Sentinel incident comments</li>\n                    </ol>\n                </div>\n                \n                <div class=\"step-container\">\n                    <div class=\"step-title\"><i>🔑</i> Account Recovery Process</div>\n                    <p><strong>Once the security assessment is complete:</strong></p>\n                    <ol class=\"steps-list\">\n                        <li><strong>If legitimate threat:</strong> Proceed with full incident response procedures</li>\n                        <li><strong>If false positive:</strong> Re-enable the account and document the resolution</li>\n                        <li><strong>For service accounts:</strong> Coordinate with the server team before re-enabling</li>\n                        <li><strong>Monitor the account</strong> for any suspicious activity post-recovery</li>\n                    </ol>\n                </div>\n            </div>\n            \n            <div class=\"important-note\">\n                <strong>Automated Security Response:</strong>\n                <p>This account was automatically disabled as part of our security automation. The Information Security team should review this incident promptly to determine if this was a legitimate security threat or requires immediate attention.</p>\n            </div>\n            \n            <p style=\"margin-top: 30px;\">Please review this incident and take appropriate action based on your security procedures and policies.</p>\n            \n            <div class=\"signature\">\n                <p><strong>Automated Security System</strong><br>\n                Your Company Information Security</p>\n            </div>\n        </div>\n        \n        <div class=\"footer\">\n            <p>This is an automated security notification from Your Company Security Operations</p>\n            <p>For questions about this alert, please review the associated Sentinel incident or contact the Information Security Team</p>\n            <p><strong>Security Team Contact:</strong> security@company.com</p>\n        </div>\n    </div>\n</body>\n</html>"
+            },
+            "Add_comment_to_incident_(V3)": {
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-3']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                        "message": "<p class=\"editor-paragraph\">@{outputs('Compose_Email_response')}</p>"
+                    },
+                    "path": "/Incidents/Comment"
+                }
+            },
+            "For_each": {
+                "foreach": "@if(empty(body('Entities_-_Get_Accounts')?['Accounts']), json('[{\"Email\":\"securityteam@company.com\"}]'), body('Entities_-_Get_Accounts')?['Accounts'])",
+                "actions": {
+                    "Send_an_email_(V2)": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "To": "security@company.com",
+                                "Subject": "AD Account Disabled Event - @{triggerBody()?['object']?['properties']?['title']}",
+                                "Body": "<p class=\"editor-paragraph\">@{outputs('Compose_Email_response')}</p>",
+                                "Importance": "High"
+                            },
+                            "path": "/v2/Mail"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Compose_Email_response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "Company logo link": {
+                "defaultValue": "https://www.YourCompany.com/sites/default/files/2023-02/YourCompany-logo.svg",
+                "type": "String"
+            },
+            "Report name": {
+                "defaultValue": "YourCompany",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-HTTP-Send-Isolation-Courtesy-Email",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-Block_URL",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-3": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "office365": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "o365-HTTP-Send-Isolation-Courtesy-Email"
+                }
+            }
+        }
+    }
+}

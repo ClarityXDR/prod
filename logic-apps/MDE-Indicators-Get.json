@@ -1,0 +1,135 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "recurrence": {
+                    "frequency": "Hour",
+                    "interval": 6
+                },
+                "evaluatedRecurrence": {
+                    "frequency": "Hour",
+                    "interval": 6
+                },
+                "type": "Recurrence"
+            }
+        },
+        "actions": {
+            "Get_KeyVault_Secret": {
+                "runAfter": {},
+                "type": "Http",
+                "inputs": {
+                    "method": "GET",
+                    "uri": "https://@{parameters('KeyVaultName')}.vault.azure.net/secrets/@{encodeURIComponent(parameters('KeyVaultSecretName'))}?api-version=7.3",
+                    "authentication": {
+                        "type": "ManagedServiceIdentity",
+                        "resource": "https://vault.azure.net"
+                    }
+                }
+            },
+            "Get_Azure_AD_Token": {
+                "runAfter": {
+                    "Get_KeyVault_Secret": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://login.microsoftonline.com/@{tenant().tenantId}/oauth2/token",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    "body": "grant_type=client_credentials&client_id=@{parameters('AppId')}&client_secret=@{body('Get_KeyVault_Secret')?['value']}&resource=https://api.securitycenter.microsoft.com"
+                }
+            },
+            "Get_MDE_Indicators": {
+                "runAfter": {
+                    "Get_Azure_AD_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://api.securitycenter.microsoft.com/api/indicators",
+                    "method": "GET",
+                    "headers": {
+                        "Authorization": "Bearer @{body('Get_Azure_AD_Token').access_token}",
+                        "Content-Type": "application/json"
+                    }
+                }
+            },
+            "Process_Indicators": {
+                "foreach": "@body('Get_MDE_Indicators').value",
+                "actions": {
+                    "Send_To_Log_Analytics": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": "{\"id\":\"@{items('Process_Indicators').id}\",\"indicatorValue\":\"@{items('Process_Indicators').indicatorValue}\",\"indicatorType\":\"@{items('Process_Indicators').indicatorType}\",\"action\":\"@{items('Process_Indicators').action}\",\"application\":\"@{items('Process_Indicators').application}\",\"source\":\"@{items('Process_Indicators').source}\",\"sourceType\":\"@{items('Process_Indicators').sourceType}\",\"indicatorTitle\":\"@{items('Process_Indicators').title}\",\"creationTimeDateTimeUtc\":\"@{items('Process_Indicators').creationTimeDateTimeUtc}\",\"description\":\"@{items('Process_Indicators').description}\",\"expirationTime\":\"@{items('Process_Indicators').expirationTime}\",\"severity\":\"@{items('Process_Indicators').severity}\",\"recommendedActions\":\"@{items('Process_Indicators').recommendedActions}\",\"rbacGroupNames\":\"@{items('Process_Indicators').rbacGroupNames}\",\"tlpLevel\":\"@{items('Process_Indicators').tlpLevel}\",\"confidence\":\"@{items('Process_Indicators').confidence}\",\"tags\":\"@{items('Process_Indicators').tags}\",\"createdBy\":\"@{items('Process_Indicators').createdBy}\",\"createdBySource\":\"@{items('Process_Indicators').createdBySource}\",\"lastUpdatedBy\":\"@{items('Process_Indicators').lastUpdatedBy}\",\"lastUpdateTime\":\"@{items('Process_Indicators').lastUpdateTime}\",\"additionalInfo\":\"@{items('Process_Indicators').additionalInfo}\",\"directlyAddedToMDE\":true,\"modifiedInLogAnalytics\":false}",
+                            "headers": {
+                                "Log-Type": ""
+                            },
+                            "path": "/api/logs",
+                            "queries": {
+                                "customLogName": "@parameters('CustomTableName')",
+                                "workspaceId": "@parameters('WorkspaceId')"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Get_MDE_Indicators": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "AppId": {
+                "defaultValue": "c9bc461a-3c66-46cc-af1c-40e92aa19409",
+                "type": "String"
+            },
+            "KeyVaultName": {
+                "defaultValue": "indicator-kv-21sj7ui6",
+                "type": "String"
+            },
+            "KeyVaultSecretName": {
+                "defaultValue": "IndicatorAppSecret",
+                "type": "String"
+            },
+            "WorkspaceId": {
+                "defaultValue": "/subscriptions/be32fada-aec2-4ccf-8e5d-cb0b3e41fb3c/resourceGroups/mde-indicator-sync-rg/providers/Microsoft.OperationalInsights/workspaces/mde-indicator-sync-ws",
+                "type": "String"
+            },
+            "CustomTableName": {
+                "defaultValue": "MDEIndicators_CL",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azureloganalyticsdatacollector": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azureloganalyticsdatacollector",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azureloganalyticsdatacollector"
+                }
+            }
+        }
+    }
+}

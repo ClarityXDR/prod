@@ -1,0 +1,225 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "recurrence": {
+                    "frequency": "Week",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            "9"
+                        ],
+                        "weekDays": [
+                            "Monday"
+                        ]
+                    }
+                },
+                "evaluatedRecurrence": {
+                    "frequency": "Week",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            "9"
+                        ],
+                        "weekDays": [
+                            "Monday"
+                        ]
+                    }
+                },
+                "type": "Recurrence"
+            }
+        },
+        "actions": {
+            "CurrentDate": {
+                "runAfter": {},
+                "type": "Expression",
+                "kind": "CurrentTime",
+                "inputs": {}
+            },
+            "CurrentDateFormat": {
+                "runAfter": {
+                    "PastWeekDate": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Expression",
+                "kind": "ConvertTimeZone",
+                "inputs": {
+                    "baseTime": "@body('CurrentDate')",
+                    "sourceTimeZone": "UTC",
+                    "destinationTimeZone": "UTC",
+                    "formatString": "d"
+                }
+            },
+            "Initialize_variable_-_Timechart": {
+                "runAfter": {
+                    "SecureScoreViz": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "img",
+                            "type": "string",
+                            "value": "<img src=\"cid:@{body('SecureScoreViz')?['attachmentName']}\"/>"
+                        }
+                    ]
+                }
+            },
+            "PastDateFormat": {
+                "runAfter": {
+                    "CurrentDateFormat": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Expression",
+                "kind": "ConvertTimeZone",
+                "inputs": {
+                    "baseTime": "@body('PastWeekDate')",
+                    "sourceTimeZone": "UTC",
+                    "destinationTimeZone": "UTC",
+                    "formatString": "d"
+                }
+            },
+            "PastWeekDate": {
+                "runAfter": {
+                    "CurrentDate": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Expression",
+                "kind": "SubtractFromTime",
+                "inputs": {
+                    "baseTime": "@body('CurrentDate')",
+                    "interval": 1,
+                    "timeUnit": "Week"
+                }
+            },
+            "SecureScoreRankingsViz": {
+                "runAfter": {
+                    "Initialize_variable_-_Timechart": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "SecureScoreControls_CL\n| extend SubscriptionId = tostring(split(id_s, \"/\", 2)[0]), SecurityControl = properties_displayName_s\n| where properties_score_max_d != 0\n| join kind = leftouter (Subscriptions_CL) \non $left.SubscriptionId == $right.SubscriptionId\n| summarize by Subscription = displayName_s, ScorePercent = round((round(properties_score_current_d, 0)*100)/properties_score_max_d, 0), SecurityControl\n| where ScorePercent != 100\n| sort by Subscription asc , ScorePercent desc",
+                    "path": "/visualizeQuery",
+                    "queries": {
+                        "subscriptions": "@parameters('SecureScoreLogAnalyticsSubId')",
+                        "resourcegroups": "@parameters('SecureScoreLogAnalyticsRGName')",
+                        "resourcetype": "Log Analytics Workspace",
+                        "resourcename": "@parameters('SecureScoreLogAnalyticsName')",
+                        "timerange": "Last 24 hours",
+                        "visType": "Html Table"
+                    }
+                }
+            },
+            "SecureScoreViz": {
+                "runAfter": {
+                    "PastDateFormat": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "SecureScore_CL\n| where properties_score_max_d != 0\n| extend ScorePercent = round((round(properties_score_current_d, 0)*100)/properties_score_max_d, 0), SubscriptionId = strcat(split(id_s, '/')[2])\n| join kind = leftouter (Subscriptions_CL) \non $left.SubscriptionId == $right.SubscriptionId\n| summarize by TimeGenerated, ScorePercent, Subscription = displayName_s",
+                    "path": "/visualizeQuery",
+                    "queries": {
+                        "subscriptions": "@parameters('SecureScoreLogAnalyticsSubId')",
+                        "resourcegroups": "@parameters('SecureScoreLogAnalyticsRGName')",
+                        "resourcetype": "Log Analytics Workspace",
+                        "resourcename": "@parameters('SecureScoreLogAnalyticsName')",
+                        "timerange": "Last 7 days",
+                        "visType": "Time Chart"
+                    }
+                }
+            },
+            "Send_an_email_(V2)": {
+                "runAfter": {
+                    "SecureScoreRankingsViz": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "To": "SecureScoreUpdate@YourCompany.com",
+                        "Subject": "Security Score weekly briefing |  @{body('PastDateFormat')} - @{body('CurrentDateFormat')}",
+                        "Body": "<p><span style=\"font-size: 30px; color: rgb(71,85,119)\">Security Score weekly briefing</span><br>\n<br>\n<span style=\"font-size: 14px\">Daily trending secure score by subscription - Are you trending down ? </span><a href=\"https://portal.azure.com/#blade/Microsoft_Azure_Security/SecurityMenuBlade/23\"><span style=\"font-size: 14px\">Review unhealthy Security Control details</span></a><span style=\"font-size: 14px\"><br>\n<br>\n</span><span style=\"font-size: 10px\"><em>Remediate unhealthy resources under Security Controls<br>\nImplement </em></span><a href=\"https://azsk.azurewebsites.net/\"><span style=\"font-size: 10px\"><em>SecureDevOps Kit for Azure</em></span></a><span style=\"font-size: 10px\"><em> , design and deploy securely</em></span><span style=\"font-size: 14px\"><br>\n</span><span style=\"font-size: 12px\"><br>\n</span><br>\n@{variables('img')}<br>\n<br>\n<span style=\"font-size: 10px\"><br>\n<br>\n</span><span style=\"font-family: arial\">UnHealthy SecurityControl Rankings</span><span style=\"font-size: 12px\"><br>\n<br>\n</span><span style=\"font-size: 12px\">@{base64ToString(body('SecureScoreRankingsViz')?['attachmentContent'])}</span><span style=\"font-size: 12px\"></span></p>",
+                        "Attachments": [
+                            {
+                                "ContentBytes": "@{body('SecureScoreViz')?['attachmentContent']}",
+                                "Name": "@body('SecureScoreViz')?['attachmentName']"
+                            }
+                        ],
+                        "Importance": "High"
+                    },
+                    "path": "/v2/Mail"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "SecureScoreLogAnalyticsName": {
+                "defaultValue": "SecureScoreData-4ybmngybxrrww",
+                "type": "String"
+            },
+            "SecureScoreLogAnalyticsRGName": {
+                "defaultValue": "git-securescore-data-rg",
+                "type": "String"
+            },
+            "SecureScoreLogAnalyticsSubId": {
+                "defaultValue": "75020424-48b7-4e8c-adc8-41da6307fcd7",
+                "type": "String"
+            },
+            "ComplianceEmailAddress": {
+                "defaultValue": "Karthikeyan_Yoganathan@YourCompany.com",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuremonitorlogs": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuremonitorlogs",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuremonitorlogs-Send-SecureScoreBriefing"
+                },
+                "office365-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "office365-1"
+                }
+            }
+        }
+    }
+}

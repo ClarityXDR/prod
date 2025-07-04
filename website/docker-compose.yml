@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: clarityxdr-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+    networks:
+      - app-network
+    labels:
+      - "clarityxdr.service=proxy"
+      - "clarityxdr.component=traefik"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: clarityxdr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    labels:
+      - "clarityxdr.service=database"
+      - "clarityxdr.component=postgres"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: clarityxdr-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    labels:
+      - "clarityxdr.service=database"
+      - "clarityxdr.component=pgbouncer"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: clarityxdr-backend
+    restart: unless-stopped
+    environment:
+      - DB_HOST=pgbouncer
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - DB_SSL_MODE=require
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - NODE_ENV=production
+    volumes:
+      - ./repositories:/app/repositories
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+      - "clarityxdr.service=backend"
+      - "clarityxdr.component=api"
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - REACT_APP_API_URL=https://api.${DOMAIN_NAME}
+    container_name: clarityxdr-frontend
+    restart: unless-stopped
+    environment:
+      - REACT_APP_API_URL=https://api.${DOMAIN_NAME}
+      - NODE_ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "clarityxdr.service=frontend"
+      - "clarityxdr.component=web"
+    networks:
+      - app-network
+
+  backup:
+    image: postgres:15-alpine
+    container_name: clarityxdr-backup
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "
+      while true; do
+        echo 'Starting backup at $$(date)'
+        pg_dump -h postgres -U ${POSTGRES_USER} -Fc ${POSTGRES_DB} > /backups/backup_$$(date +%Y%m%d_%H%M%S).dump
+        find /backups -name '*.dump' -mtime +7 -delete
+        echo 'Backup completed at $$(date)'
+        sleep 86400
+      done"
+    networks:
+      - app-network
+    labels:
+      - "clarityxdr.service=backup"
+      - "clarityxdr.component=postgres"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

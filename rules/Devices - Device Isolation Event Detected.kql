@@ -1,0 +1,116 @@
+// Get device isolation events
+let isolationEvents = CloudAppEvents
+| where ActionType == "IsolateDevice"
+| extend IsolatedDevice = tostring(parse_json(RawEventData).DeviceName),
+         IsolationComment = tostring(parse_json(RawEventData).ActionComment),
+         IsolationScope = tostring(parse_json(RawEventData).ActionScope),
+         DeviceId = tostring(parse_json(RawEventData).DeviceId)
+| project-rename InitiatedByAccountName = AccountDisplayName,
+                 InitiatedByAccounttId = AccountId;
+// Get comprehensive alert information from AlertInfo and AlertEvidence
+let deviceAlerts = AlertInfo
+| join kind=inner (
+    AlertEvidence
+    | where EntityType == "Machine"
+    | extend DeviceName = tostring(parse_json(AdditionalFields).DeviceName)
+    | where isnotempty(DeviceName)
+) on AlertId
+| extend NormalizedDeviceName = tolower(DeviceName)
+| project AlertDetails = pack(
+    "AlertId", AlertId,
+    "Title", Title,
+    "Severity", Severity,
+    "Category", Category,
+    "DetectionSource", DetectionSource,
+    "Timestamp", Timestamp,
+    "Description", tostring(parse_json(AdditionalFields).Description),   // <- new, explicit description
+    "AdditionalDetails", AdditionalFields,                               // <- keep full blob (optional)
+    "AttackTechniques", AttackTechniques,
+    "ServiceSource", ServiceSource,
+    "Status", "Active", // Default status as Advanced Hunting doesn't have Status field
+    "RecommendedAction", "Review alert details in Defender portal"
+), NormalizedDeviceName, Timestamp, AlertId
+| order by Timestamp desc;
+// ----- new helper table: per-device list of alert descriptions -----
+let alertDescriptionsByDevice = deviceAlerts
+| project NormalizedDeviceName,
+         AlertDescription = tostring(AlertDetails.Description)
+| summarize AlertDescriptions = make_list(AlertDescription) by NormalizedDeviceName;
+// Get device information for additional context
+let deviceContext = DeviceInfo
+| where isnotempty(DeviceName)
+| extend NormalizedDeviceName = tolower(DeviceName)
+| summarize arg_max(Timestamp, *) by NormalizedDeviceName
+| project NormalizedDeviceName, 
+          OSPlatform, 
+          OSVersion, 
+          DeviceType,
+          OnboardingStatus,
+          IsAzureADJoined,
+          PublicIP;
+// Get related events timeline from multiple sources
+let timelineEvents = 
+    // File events only - focus on malicious file activity
+    DeviceFileEvents
+    | where isnotempty(DeviceName) and (ActionType in ("FileCreated", "FileModified", "FileDeleted") or SHA1 != "")
+    | extend NormalizedDeviceName = tolower(DeviceName)
+    | project TimelineEvent = pack(
+        "TimeGenerated", Timestamp,
+        "EventType", "FileEvent",
+        "Description", strcat("Suspicious file activity: ", ActionType, " - ", FileName, " (", FolderPath, ")"),
+        "ActionTaken", ActionType,
+        "EventSeverity", iif(SHA1 != "", "High", "Medium"),
+        "FileHash", SHA1
+    ), NormalizedDeviceName, Timestamp
+    | order by NormalizedDeviceName asc, Timestamp asc;
+// Group alerts by device and get top 3 recent alerts
+let top3AlertsByDevice = deviceAlerts
+| summarize LastAlerts = make_list(AlertDetails) by NormalizedDeviceName
+| extend LastAlerts = array_slice(LastAlerts, 0, 3);
+// Group timeline events by device (limit to recent events)
+let deviceTimeline = timelineEvents
+| summarize AttackStoryTimeline = make_list(TimelineEvent) by NormalizedDeviceName
+| extend AttackStoryTimeline = array_slice(AttackStoryTimeline, 0, 10);  // unchanged positionally, but now earliest events retained
+// Join isolation events with all related data
+isolationEvents
+| extend NormalizedIsolatedDevice = tolower(IsolatedDevice)
+| lookup kind=leftouter (top3AlertsByDevice) on $left.NormalizedIsolatedDevice == $right.NormalizedDeviceName
+| lookup kind=leftouter (deviceTimeline) on $left.NormalizedIsolatedDevice == $right.NormalizedDeviceName
+| lookup kind=leftouter (deviceContext) on $left.NormalizedIsolatedDevice == $right.NormalizedDeviceName
+| lookup kind=leftouter (alertDescriptionsByDevice)
+        on $left.NormalizedIsolatedDevice == $right.NormalizedDeviceName
+| extend AlertCount = iif(isempty(LastAlerts), 0, array_length(LastAlerts))
+| extend TimelineEventsCount = iif(isempty(AttackStoryTimeline), 0, array_length(AttackStoryTimeline))
+// Create summary fields
+| extend AlertSummary = case(
+        AlertCount > 0 and isnotempty(IsolationComment),
+            strcat("Device isolated in response to incident: ", IsolationComment, 
+                   ". ", AlertCount, " related alerts detected."),
+        AlertCount > 0,
+            strcat("Device isolated due to ", AlertCount, " security alerts."),
+        isnotempty(IsolationComment),
+            strcat("Device isolated: ", IsolationComment),
+        "Device isolated as precautionary measure - no recent alerts found")
+| extend DeviceContextSummary = iif(isnotempty(OSPlatform),
+                                  strcat("Affected system: ", OSPlatform, " ", OSVersion, " - ", DeviceType),
+                                  "Device information not available")
+// Final output with all available information
+| project  Timestamp,
+          ReportId,
+          DeviceId,
+          IsolatedDevice,
+          IsolationComment,
+          IsolationScope,
+          InitiatedByAccountName,
+          InitiatedByAccounttId,
+          AlertSummary,
+          LastAlerts,
+          AlertDescriptions,            // <- new field
+          AttackStoryTimeline,
+          DeviceContextSummary,
+          OSPlatform,
+          OSVersion,
+          DeviceType,
+          OnboardingStatus,
+          RawEventData,
+          AdditionalFields

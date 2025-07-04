@@ -1,0 +1,420 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logicAppName": {
+            "type": "string",
+            "defaultValue": "CTI-Validation",
+            "metadata": {
+                "description": "Name of the Validation Logic App"
+            }
+        },
+        "sentinelWorkspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "Sentinel workspace resource ID"
+            }
+        },
+        "virusTotalApiKey": {
+            "type": "securestring",
+            "metadata": {
+                "description": "VirusTotal API key for validation"
+            }
+        }
+    },
+    "variables": {
+        "azureLogAnalyticsConnectionName": "azureloganalytics",
+        "azureLogAnalyticsDataCollectorConnectionName": "azureloganalyticsdatacollector"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azureLogAnalyticsConnectionName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "displayName": "Azure Log Analytics",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalytics')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('logicAppName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('azureLogAnalyticsConnectionName'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Day",
+                                "interval": 1,
+                                "schedule": {
+                                    "hours": [
+                                        "2"
+                                    ],
+                                    "minutes": [
+                                        0
+                                    ]
+                                }
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Get_indicators_for_validation": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureloganalytics']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "CTI_IndicatorManagement_CL\n| where ValidationStatus_s == \"Pending\" or LastValidated_t < ago(7d)\n| where ExpirationDate_t > now()\n| where ConfidenceScore_d >= 50\n| project IndicatorId_s, IndicatorType_s, IndicatorValue_s, ConfidenceScore_d, CreatedDate_t\n| take 100",
+                                "path": "/query"
+                            },
+                            "runAfter": {}
+                        },
+                        "For_each_indicator_to_validate": {
+                            "foreach": "@body('Get_indicators_for_validation')?['value']",
+                            "actions": {
+                                "Initialize_validation_result": {
+                                    "type": "InitializeVariable",
+                                    "inputs": {
+                                        "variables": [
+                                            {
+                                                "name": "validationResult",
+                                                "type": "object",
+                                                "value": {
+                                                    "isValid": false,
+                                                    "confidence": 0,
+                                                    "source": "unknown",
+                                                    "detectionCount": 0,
+                                                    "totalEngines": 0
+                                                }
+                                            }
+                                        ]
+                                    }
+                                },
+                                "Validate_with_VirusTotal": {
+                                    "type": "Switch",
+                                    "expression": "@items('For_each_indicator_to_validate')?['IndicatorType_s']",
+                                    "cases": {
+                                        "FileHash": {
+                                            "case": "FileHash",
+                                            "actions": {
+                                                "VT_Check_File_Hash": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "method": "GET",
+                                                        "uri": "https://www.virustotal.com/vtapi/v2/file/report",
+                                                        "queries": {
+                                                            "apikey": "@parameters('virusTotalApiKey')",
+                                                            "resource": "@items('For_each_indicator_to_validate')?['IndicatorValue_s']"
+                                                        }
+                                                    }
+                                                },
+                                                "Process_File_Hash_Result": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "validationResult",
+                                                        "value": {
+                                                            "isValid": "@greater(body('VT_Check_File_Hash')?['positives'], 0)",
+                                                            "confidence": "@mul(div(body('VT_Check_File_Hash')?['positives'], body('VT_Check_File_Hash')?['total']), 100)",
+                                                            "source": "VirusTotal",
+                                                            "detectionCount": "@body('VT_Check_File_Hash')?['positives']",
+                                                            "totalEngines": "@body('VT_Check_File_Hash')?['total']"
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "VT_Check_File_Hash": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "IPAddress": {
+                                            "case": "IPAddress",
+                                            "actions": {
+                                                "VT_Check_IP": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "method": "GET",
+                                                        "uri": "https://www.virustotal.com/vtapi/v2/ip-address/report",
+                                                        "queries": {
+                                                            "apikey": "@parameters('virusTotalApiKey')",
+                                                            "ip": "@items('For_each_indicator_to_validate')?['IndicatorValue_s']"
+                                                        }
+                                                    }
+                                                },
+                                                "Process_IP_Result": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "validationResult",
+                                                        "value": {
+                                                            "isValid": "@greater(length(body('VT_Check_IP')?['detected_urls']), 0)",
+                                                            "confidence": "@if(greater(length(body('VT_Check_IP')?['detected_urls']), 5), 85, if(greater(length(body('VT_Check_IP')?['detected_urls']), 0), 60, 20))",
+                                                            "source": "VirusTotal",
+                                                            "detectionCount": "@length(body('VT_Check_IP')?['detected_urls'])",
+                                                            "totalEngines": 1
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "VT_Check_IP": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "URL": {
+                                            "case": "URL",
+                                            "actions": {
+                                                "VT_Check_URL": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "method": "POST",
+                                                        "uri": "https://www.virustotal.com/vtapi/v2/url/report",
+                                                        "headers": {
+                                                            "Content-Type": "application/x-www-form-urlencoded"
+                                                        },
+                                                        "body": "apikey=@{parameters('virusTotalApiKey')}&resource=@{items('For_each_indicator_to_validate')?['IndicatorValue_s']}"
+                                                    }
+                                                },
+                                                "Process_URL_Result": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "validationResult",
+                                                        "value": {
+                                                            "isValid": "@greater(body('VT_Check_URL')?['positives'], 0)",
+                                                            "confidence": "@mul(div(body('VT_Check_URL')?['positives'], body('VT_Check_URL')?['total']), 100)",
+                                                            "source": "VirusTotal",
+                                                            "detectionCount": "@body('VT_Check_URL')?['positives']",
+                                                            "totalEngines": "@body('VT_Check_URL')?['total']"
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "VT_Check_URL": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Domain": {
+                                            "case": "Domain",
+                                            "actions": {
+                                                "VT_Check_Domain": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "method": "GET",
+                                                        "uri": "https://www.virustotal.com/vtapi/v2/domain/report",
+                                                        "queries": {
+                                                            "apikey": "@parameters('virusTotalApiKey')",
+                                                            "domain": "@items('For_each_indicator_to_validate')?['IndicatorValue_s']"
+                                                        }
+                                                    }
+                                                },
+                                                "Process_Domain_Result": {
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "validationResult",
+                                                        "value": {
+                                                            "isValid": "@greater(length(body('VT_Check_Domain')?['detected_urls']), 0)",
+                                                            "confidence": "@if(greater(length(body('VT_Check_Domain')?['detected_urls']), 10), 90, if(greater(length(body('VT_Check_Domain')?['detected_urls']), 0), 70, 30))",
+                                                            "source": "VirusTotal",
+                                                            "detectionCount": "@length(body('VT_Check_Domain')?['detected_urls'])",
+                                                            "totalEngines": 1
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "VT_Check_Domain": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {
+                                            "Set_Unknown_Type": {
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "validationResult",
+                                                    "value": {
+                                                        "isValid": false,
+                                                        "confidence": 0,
+                                                        "source": "Unknown Type",
+                                                        "detectionCount": 0,
+                                                        "totalEngines": 0
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Initialize_validation_result": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                },
+                                "Determine_action_based_on_validation": {
+                                    "type": "If",
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "less": [
+                                                    "@variables('validationResult')?['confidence']",
+                                                    30
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "actions": {
+                                        "Flag_for_removal": {
+                                            "type": "Compose",
+                                            "inputs": {
+                                                "action": "remove",
+                                                "reason": "Low confidence validation result",
+                                                "indicatorId": "@items('For_each_indicator_to_validate')?['IndicatorId_s']",
+                                                "validationResult": "@variables('validationResult')"
+                                            }
+                                        },
+                                        "Call_removal_logic_app": {
+                                            "type": "Http",
+                                            "inputs": {
+                                                "method": "POST",
+                                                "uri": "https://prod-xx.eastus.logic.azure.com:443/workflows/xxxxx/triggers/manual/paths/invoke",
+                                                "headers": {
+                                                    "Content-Type": "application/json"
+                                                },
+                                                "body": {
+                                                    "indicatorId": "@items('For_each_indicator_to_validate')?['IndicatorId_s']",
+                                                    "reason": "Failed validation - low confidence",
+                                                    "validationData": "@variables('validationResult')"
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Flag_for_removal": [
+                                                    "Succeeded"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Update_validation_status": {
+                                                "type": "Compose",
+                                                "inputs": {
+                                                    "action": "update",
+                                                    "indicatorId": "@items('For_each_indicator_to_validate')?['IndicatorId_s']",
+                                                    "newConfidence": "@variables('validationResult')?['confidence']",
+                                                    "validationStatus": "Valid",
+                                                    "lastValidated": "@utcnow()",
+                                                    "validationSource": "@variables('validationResult')?['source']"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Validate_with_VirusTotal": [
+                                            "Succeeded",
+                                            "Failed"
+                                        ]
+                                    }
+                                },
+                                "Log_validation_result": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azureloganalyticsdatacollector']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "IndicatorId": "@items('For_each_indicator_to_validate')?['IndicatorId_s']",
+                                            "ValidationDate": "@utcnow()",
+                                            "ValidationSource": "@variables('validationResult')?['source']",
+                                            "ValidationResult": "@variables('validationResult')?['isValid']",
+                                            "ConfidenceScore": "@variables('validationResult')?['confidence']",
+                                            "DetectionCount": "@variables('validationResult')?['detectionCount']",
+                                            "TotalEngines": "@variables('validationResult')?['totalEngines']"
+                                        },
+                                        "path": "/api/logs",
+                                        "queries": {
+                                            "Log-Type": "CTI_ValidationResults"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Determine_action_based_on_validation": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Get_indicators_for_validation": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 5
+                                }
+                            }
+                        },
+                        "Send_validation_summary": {
+                            "type": "Compose",
+                            "inputs": {
+                                "validationRun": "@utcnow()",
+                                "totalIndicators": "@length(body('Get_indicators_for_validation')?['value'])",
+                                "status": "Completed"
+                            },
+                            "runAfter": {
+                                "For_each_indicator_to_validate": [
+                                    "Succeeded"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureloganalytics": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azureLogAnalyticsConnectionName'))]",
+                                "connectionName": "[variables('azureLogAnalyticsConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalytics')]"
+                            },
+                            "azureloganalyticsdatacollector": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azureLogAnalyticsDataCollectorConnectionName'))]",
+                                "connectionName": "[variables('azureLogAnalyticsDataCollectorConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureloganalyticsdatacollector')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

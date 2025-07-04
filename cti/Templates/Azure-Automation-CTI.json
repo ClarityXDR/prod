@@ -1,0 +1,304 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "automationAccountName": {
+            "type": "string",
+            "defaultValue": "CTI-AutomationAccount",
+            "metadata": {
+                "description": "Name of the Azure Automation Account"
+            }
+        },
+        "sentinelWorkspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "Microsoft Sentinel workspace ID"
+            }
+        },
+        "ingestionLogicAppUrl": {
+            "type": "securestring",
+            "metadata": {
+                "description": "URL for the IoC Ingestion Logic App trigger"
+            }
+        },
+        "validationLogicAppUrl": {
+            "type": "securestring",
+            "metadata": {
+                "description": "URL for the Validation Logic App trigger"
+            }
+        },
+        "exchangeCredentialUsername": {
+            "type": "string",
+            "metadata": {
+                "description": "Exchange Online service account username"
+            }
+        },
+        "exchangeCredentialPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Exchange Online service account password"
+            }
+        },
+        "graphAppId": {
+            "type": "string",
+            "metadata": {
+                "description": "Microsoft Graph application ID for authentication"
+            }
+        },
+        "graphClientSecret": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Microsoft Graph application client secret"
+            }
+        },
+        "tenantId": {
+            "type": "string",
+            "metadata": {
+                "description": "Azure AD tenant ID"
+            }
+        }
+    },
+    "variables": {
+        "location": "[resourceGroup().location]",
+        "runbookName": "CTI-ScheduledOperations",
+        "scheduleNames": {
+            "daily": "CTI-DailyOperations",
+            "weekly": "CTI-WeeklyCleanup",
+            "hourly": "CTI-HourlyHealthCheck"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Automation/automationAccounts",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[parameters('automationAccountName')]",
+            "location": "[variables('location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "sku": {
+                    "name": "Basic"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/variables",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/CTI-SentinelWorkspaceId')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Microsoft Sentinel Workspace ID for CTI operations",
+                "value": "[concat('\"', parameters('sentinelWorkspaceId'), '\"')]",
+                "isEncrypted": false
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/variables",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/CTI-IngestionLogicAppUrl')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Logic App URL for IoC ingestion",
+                "value": "[concat('\"', parameters('ingestionLogicAppUrl'), '\"')]",
+                "isEncrypted": true
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/variables",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/CTI-ValidationLogicAppUrl')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Logic App URL for indicator validation",
+                "value": "[concat('\"', parameters('validationLogicAppUrl'), '\"')]",
+                "isEncrypted": true
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/credentials",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/CTI-ExchangeOnlineCredential')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Exchange Online service account credentials",
+                "userName": "[parameters('exchangeCredentialUsername')]",
+                "password": "[parameters('exchangeCredentialPassword')]"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/credentials",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/CTI-GraphCredential')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Microsoft Graph application credentials",
+                "userName": "[parameters('graphAppId')]",
+                "password": "[parameters('graphClientSecret')]"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/modules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/Az.Accounts')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "moduleUri": "https://www.powershellgallery.com/packages/Az.Accounts"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/modules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/Az.OperationalInsights')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Az.Accounts')]"
+            ],
+            "properties": {
+                "moduleUri": "https://www.powershellgallery.com/packages/Az.OperationalInsights"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/modules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/ExchangeOnlineManagement')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "moduleUri": "https://www.powershellgallery.com/packages/ExchangeOnlineManagement"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/modules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/Microsoft.Graph.Authentication')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "moduleUri": "https://www.powershellgallery.com/packages/Microsoft.Graph.Authentication"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/modules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/Microsoft.Graph.Identity.SignIns')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Microsoft.Graph.Authentication')]"
+            ],
+            "properties": {
+                "moduleUri": "https://www.powershellgallery.com/packages/Microsoft.Graph.Identity.SignIns"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/runbooks",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/', variables('runbookName'))]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Az.Accounts')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Az.OperationalInsights')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'ExchangeOnlineManagement')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Microsoft.Graph.Authentication')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/modules', parameters('automationAccountName'), 'Microsoft.Graph.Identity.SignIns')]"
+            ],
+            "properties": {
+                "runbookType": "PowerShell",
+                "logProgress": true,
+                "logVerbose": true,
+                "description": "CTI Scheduled Operations - Daily maintenance tasks for threat intelligence indicators",
+                "publishContentLinkUri": "https://raw.githubusercontent.com/DataGuys/cti/refs/heads/main/PowerShell/Azure-Runbook-CTI-ScheduledOps.ps1"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/schedules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/', variables('scheduleNames').daily)]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Daily CTI operations - indicator synchronization and cleanup",
+                "startTime": "2025-06-19T02:00:00Z",
+                "frequency": "Day",
+                "interval": 1,
+                "timeZone": "UTC"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/schedules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/', variables('scheduleNames').weekly)]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Weekly CTI cleanup operations",
+                "startTime": "2025-06-22T01:00:00Z",
+                "frequency": "Week",
+                "interval": 1,
+                "timeZone": "UTC"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/schedules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/', variables('scheduleNames').hourly)]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            ],
+            "properties": {
+                "description": "Hourly health check for CTI services",
+                "startTime": "2025-06-18T15:00:00Z",
+                "frequency": "Hour",
+                "interval": 1,
+                "timeZone": "UTC"
+            }
+        },
+        {
+            "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+            "apiVersion": "2020-01-13-preview",
+            "name": "[concat(parameters('automationAccountName'), '/', guid(resourceGroup().id, variables('scheduleNames').daily))]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), variables('runbookName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), variables('scheduleNames').daily)]"
+            ],
+            "properties": {
+                "schedule": {
+                    "name": "[variables('scheduleNames').daily]"
+                },
+                "runbook": {
+                    "name": "[variables('runbookName')]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "automationAccountName": {
+            "type": "string",
+            "value": "[parameters('automationAccountName')]"
+        },
+        "managedIdentityPrincipalId": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2020-01-13-preview', 'Full').identity.principalId]"
+        },
+        "runbookName": {
+            "type": "string",
+            "value": "[variables('runbookName')]"
+        }
+    }
+}

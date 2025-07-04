@@ -1,0 +1,137 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_alert": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/subscribe"
+                }
+            }
+        },
+        "actions": {
+            "Add_comment_to_incident_(V3)": {
+                "runAfter": {
+                    "Compose": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "incidentArmId": "@body('Alert_-_Get_incident')?['id']",
+                        "message": "@{outputs('Compose')}\n\nHarmless: @{body('Get_an_IP_report')?['data']?['attributes']?['last_analysis_stats']?['harmless']}\nMalicious: @{body('Get_an_IP_report')?['data']?['attributes']?['last_analysis_stats']?['malicious']}\nSuspicious: @{body('Get_an_IP_report')?['data']?['attributes']?['last_analysis_stats']?['suspicious']}\nTimeout: @{body('Get_an_IP_report')?['data']?['attributes']?['last_analysis_stats']?['timeout']}\nUndetected: @{body('Get_an_IP_report')?['data']?['attributes']?['last_analysis_stats']?['undetected']}\n\nCountry: @{body('Get_an_IP_report')?['data']?['attributes']?['country']}\nContinent: @{body('Get_an_IP_report')?['data']?['attributes']?['continent']}\nOwner: @{body('Get_an_IP_report')?['data']?['attributes']?['as_owner']}\nTotal votes harmless: @{body('Get_an_IP_report')?['data']?['attributes']?['total_votes']?['harmless']}\nTotal votes malicious: @{body('Get_an_IP_report')?['data']?['attributes']?['total_votes']?['malicious']}\nReputation: @{body('Get_an_IP_report')?['data']?['attributes']?['reputation']}"
+                    },
+                    "path": "/Incidents/Comment"
+                }
+            },
+            "Compose": {
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose",
+                "inputs": "VirusTotal report for IP: "
+            },
+            "Entities_-_Get_IPs": {
+                "runAfter": {
+                    "Alert_-_Get_incident": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['Entities']",
+                    "path": "/entities/ip"
+                }
+            },
+            "For_each": {
+                "foreach": "@body('Entities_-_Get_IPs')?['IPs']",
+                "actions": {
+                    "Get_an_IP_report": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['virustotal_1']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/api/v3/ip_addresses/connectorV2/@{encodeURIComponent(items('For_each')?['Address'])}"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_IPs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Alert_-_Get_incident": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/Incidents/subscriptions/@{encodeURIComponent('00000000-0000-0000-0000-000000000000')}/resourceGroups/@{encodeURIComponent('YourResourceGroup')}/workspaces/@{encodeURIComponent('ff0790ad-e860-4d15-8638-089ed9ea1dec')}/alerts/@{encodeURIComponent(triggerBody()?['SystemAlertId'])}"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-MSSentinelAlert",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "virustotal_1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/virustotal",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "virustotal-Get-VirusTotalIPReport"
+                }
+            }
+        }
+    }
+}

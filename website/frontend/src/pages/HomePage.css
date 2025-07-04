@@ -1,0 +1,155 @@
+#particles-js {
+  position: absolute;
+  top: 0;
+  left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+  height: 100%;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.count-particles {
+  background: #000022;
+  position: absolute;
+  top: 48px;
+  left: var(--sidebar-width);
+  width: 80px;
+  color: #13E8E9;
+  font-size: .8em;
+  text-align: left;
+  text-indent: 4px;
+  line-height: 14px;
+  padding-bottom: 2px;
+  font-family: Helvetica, Arial, sans-serif;
+  font-weight: bold;
+  z-index: 201;
+}
+
+.js-count-particles { 
+  font-size: 1.1em; 
+}
+
+.main {
+  position: absolute;
+  top: 0;
+  left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+  height: 100%;
+  overflow: auto;
+}
+
+.hero-wrapper {
+  position: relative;
+  z-index: 2;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 100px 1rem 1rem;
+  text-align: center;
+}
+
+.hero-logo img { 
+  height: 160px; 
+  margin-bottom: 1rem; 
+}
+
+.hero-title { 
+  font-size: 3rem; 
+  line-height: 1.2; 
+  margin: 1rem 0; 
+}
+
+.hero-title .brand { 
+  color: var(--white); 
+  font-weight: bold; 
+}
+
+.hero-title .xdr { 
+  color: var(--orange); 
+}
+
+.hero-title .line1 { 
+  display: block; 
+  color: var(--lime); 
+  margin-top: .5rem; 
+}
+
+.hero-title .line2 { 
+  display: block; 
+  color: var(--orange); 
+}
+
+.hero-sub { 
+  font-size: 1.1rem; 
+  line-height: 1.4; 
+  max-width: 80%; 
+  margin: 1rem auto; 
+  opacity: .9; 
+}
+
+.hero-input {
+  margin: 2rem auto 1rem;
+  max-width: 400px;
+  position: relative;
+}
+
+.hero-input input {
+  width: 100%; 
+  padding: 1em 1.5em; 
+  border: 2px solid var(--lime);
+  border-radius: 50px; 
+  background: rgba(124,219,70,0.2);
+  color: var(--white); 
+  font-size: 1rem;
+}
+
+.hero-input::after {
+  content: '';
+  position: absolute; 
+  inset: -14px 50%; 
+  transform: translateX(-50%);
+  width: calc(100% + 28px); 
+  height: calc(100% + 28px);
+  border-radius: 60px;
+  box-shadow: 0 0 30px 5px var(--lime), 0 0 20px 10px var(--orange);
+  animation: pulse 2s infinite;
+}
+
+.ctas { 
+  display: flex; 
+  gap: 1rem; 
+  justify-content: center; 
+  margin: 2rem 0; 
+}
+
+.btn { 
+  padding: .75em 1.5em; 
+  border: 2px solid var(--lime); 
+  border-radius: 30px;
+  background: transparent; 
+  color: var(--lime); 
+  font-weight: 600;
+  text-decoration: none; 
+  transition: background .3s;
+}
+
+.btn-primary { 
+  background: var(--lime); 
+  color: var(--bg); 
+}
+
+.btn-secondary { 
+  border-color: var(--orange); 
+  color: var(--orange); 
+}
+
+.ticker { 
+  margin: 2rem 0; 
+  font-size: .9rem; 
+  opacity: .8; 
+}
+
+footer { 
+  text-align: center; 
+  padding: 1.5rem 0; 
+  font-size: .9rem; 
+}

@@ -1,0 +1,125 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "For_each": {
+                "foreach": "@body('Entities_-_Get_FileHashes')?['Filehashes']",
+                "actions": {
+                    "Add_comment_to_incident_(V3)": {
+                        "runAfter": {
+                            "Compose": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuresentinel-2']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "incidentArmId": "@triggerBody()?['object']?['id']",
+                                "message": "<p class=\"editor-paragraph\">🔍 **VirusTotal Threat Analysis for File: ** 📊 **THREAT SUMMARY** • Reputation Score: • Malicious Detections: /94 engines • Suspicious Detections: /94 engines • Community Votes: malicious, harmless 🌍 **GEOLOCATION &amp; OWNERSHIP** • Country: • Continent: • AS Owner: 📈 **DETAILED ANALYSIS RESULTS** • Harmless: • Malicious: • Suspicious: • Undetected: • Timeout:</p>"
+                            },
+                            "path": "/Incidents/Comment"
+                        }
+                    },
+                    "Compose": {
+                        "runAfter": {
+                            "Get_file_report": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose",
+                        "inputs": "VirusTotal enrichment completed for all Files in this incident."
+                    },
+                    "Get_file_report": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['virustotal_1']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/api/v3/files/connectorV2/@{encodeURIComponent(items('For_each'))}"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_FileHashes": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Entities_-_Get_FileHashes": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-2']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/filehash"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-MSSentinelAlert",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-2": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "virustotal_1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/virustotal",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "virustotal-Get-VirusTotalIPReport"
+                }
+            }
+        }
+    }
+}

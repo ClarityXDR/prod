@@ -1,0 +1,48 @@
+// Detect TGT theft and related Kerberos attacks
+let timeframe = 48h;
+// Look for common tools and commands associated with TGT theft
+DeviceProcessEvents
+| where Timestamp > ago(timeframe)
+| where ProcessCommandLine has_any("kerberos::list", "kerberos::ptt", "sekurlsa::tickets", "krbtgt", 
+                                 "ticket.kirbi", "mimikatz", "Rubeus.exe", "asktgt", "dump", "lsadump", 
+                                 "ticket.ccache", "extract", "kerbdump")
+    or FileName in~ ("klist.exe", "kerberos.dll")
+    and ProcessCommandLine has "purge" and ProcessCommandLine has "tickets"
+| project 
+    Timestamp, 
+    DeviceId, 
+    DeviceName, 
+    AccountName, 
+    ProcessCommandLine, 
+    FileName, 
+    SHA256 
+| union (
+    // Look for LSASS access which could indicate ticket extraction
+    DeviceEvents
+    | where Timestamp > ago(timeframe)
+    | where ActionType == "PotentiallyUnwantedAccess" or ActionType == "SensitiveProcessAccess"
+    | where FileName has "lsass.exe" 
+    | project 
+        Timestamp, 
+        DeviceId, 
+        DeviceName, 
+        ActionType, 
+        FileName, 
+        AccountName, 
+        AccountDomain
+)
+| union (
+    // Look for suspicious registry operations related to Kerberos
+    DeviceRegistryEvents
+    | where Timestamp > ago(timeframe)
+    | where RegistryKey has "SECURITY\\Policy\\Secrets\\krbtgt"
+        or RegistryKey has "LSA\\Kerberos"
+    | where ActionType == "RegistryValueSet" or ActionType == "RegistryKeyCreated"
+    | project 
+        Timestamp, 
+        DeviceId, 
+        DeviceName, 
+        RegistryKey, 
+        RegistryValueName, 
+        ActionType
+)

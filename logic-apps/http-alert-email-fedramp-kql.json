@@ -1,0 +1,247 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_response_to_an_Azure_Sentinel_alert_is_triggered": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/subscribe"
+                }
+            }
+        },
+        "actions": {
+            "Initialize_variable_-_IncidentNumber": {
+                "runAfter": {
+                    "Run_query_and_visualize_results_-Re-run_alert_query": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "IncidentNumber",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                }
+            },
+            "Initialize_variable_-_IncidentURL": {
+                "runAfter": {
+                    "Initialize_variable_-_IncidentNumber": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "IncidentURL",
+                            "type": "string",
+                            "value": "https://portal.azure.com"
+                        }
+                    ]
+                }
+            },
+            "Parse_JSON__-_Extract_alert_query_details": {
+                "runAfter": {},
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@triggerBody()?['ExtendedProperties']",
+                    "schema": {
+                        "properties": {
+                            "Query": {
+                                "type": "string"
+                            },
+                            "Query Period": {
+                                "type": "string"
+                            },
+                            "Search Query Results Overall Count": {
+                                "type": "string"
+                            },
+                            "Total Account Entities": {
+                                "type": "string"
+                            },
+                            "Total Host Entities": {
+                                "type": "string"
+                            },
+                            "Trigger Operator": {
+                                "type": "string"
+                            },
+                            "Trigger Threshold": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                }
+            },
+            "Run_query_and_visualize_results_-Re-run_alert_query": {
+                "runAfter": {
+                    "Parse_JSON__-_Extract_alert_query_details": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuremonitorlogs-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@body('Parse_JSON__-_Extract_alert_query_details')?['Query']",
+                    "path": "/visualizeQuery",
+                    "queries": {
+                        "subscriptions": "00000000-0000-0000-0000-000000000000",
+                        "resourcegroups": "YourResourceGroup",
+                        "resourcetype": "Log Analytics Workspace",
+                        "resourcename": "GIT-InforSec-Sentinel",
+                        "timerange": "@body('Parse_JSON__-_Extract_alert_query_details')?['Query Period']",
+                        "visType": "Html Table"
+                    }
+                }
+            },
+            "Send_an_email_Infosec": {
+                "runAfter": {
+                    "Until": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "To": "admin@company.com",
+                        "Subject": "FedRAMP Alert @{triggerBody()?['AlertDisplayName']}",
+                        "Body": "<p><br>\nAn Azure Sentinel alert has been triggered:<br>\nTitle:@{triggerBody()?['AlertDisplayName']}<br>\nSeverity:@{triggerBody()?['Severity']}<br>\nDescription:@{triggerBody()?['Description']}<br>\nAzure Sentinel Incident Number:@{variables('IncidentNumber')}<br>\n<br>\nQuery results that triggered the alert:<br>\n@{body('Run_query_and_visualize_results_-Re-run_alert_query')}<br>\n<br>\nIncident URL: @{variables('IncidentURL')}<br>\n<br>\n<br>\n<br>\n<br>\n<br>\n<br>\n<br>\n<br>\n@{triggerBody()?['Entities']}<br>\n<br>\n</p>"
+                    },
+                    "path": "/v2/Mail"
+                }
+            },
+            "Until": {
+                "actions": {
+                    "Alert_-_Get_incident": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['WorkspaceSubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['WorkspaceResourceGroup'])}/workspaces/@{encodeURIComponent(triggerBody()?['WorkspaceId'])}/alerts/@{encodeURIComponent(triggerBody()?['SystemAlertId'])}"
+                        }
+                    },
+                    "Condition": {
+                        "actions": {
+                            "Set_variable_-_Set_incident_URL": {
+                                "runAfter": {
+                                    "Set_variable_-_Set_incident_number": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "IncidentURL",
+                                    "value": "@body('Alert_-_Get_incident')?['properties']?['incidentUrl']"
+                                }
+                            },
+                            "Set_variable_-_Set_incident_number": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "IncidentNumber",
+                                    "value": "@body('Alert_-_Get_incident')?['properties']?['incidentNumber']"
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Alert_-_Get_incident": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {
+                                "Delay": {
+                                    "type": "Wait",
+                                    "inputs": {
+                                        "interval": {
+                                            "count": 5,
+                                            "unit": "Second"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "greater": [
+                                        "@length(body('Alert_-_Get_incident')?['properties']?['Title'])",
+                                        0
+                                    ]
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variable_-_IncidentURL": [
+                        "Succeeded"
+                    ]
+                },
+                "expression": "@greater(variables('IncidentNumber'), 0)",
+                "limit": {
+                    "count": 60,
+                    "timeout": "PT1H"
+                },
+                "type": "Until"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "azuremonitorlogs-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuremonitorlogs",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuremonitorlogs-connection"
+                },
+                "office365-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/office365",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "office365-connection"
+                }
+            }
+        }
+    }
+}

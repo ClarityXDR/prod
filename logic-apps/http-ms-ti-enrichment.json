@@ -1,0 +1,151 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@{listCallbackUrl()}"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "For_each_IP_Address": {
+                "foreach": "@variables('IPAddresses')",
+                "actions": {
+                    "Condition_-_Check_if_IP_exists": {
+                        "actions": {
+                            "Add_comment_to_incident_(V3)": {
+                                "runAfter": {
+                                    "Get_IP_Threat_Intelligence": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                                        "message": "<p>Threat Intelligence for IP: @{items('For_each_IP_Address')}<br>\nMalicious: @{body('Get_IP_Threat_Intelligence')?['malicious']}<br>\nRisk Score: @{body('Get_IP_Threat_Intelligence')?['riskScore']}<br>\nTags: @{join(body('Get_IP_Threat_Intelligence')?['tags'], ', ')}<br>\nVendors identifying as malicious: @{body('Get_IP_Threat_Intelligence')?['vendorsDetected']}</p>"
+                                    },
+                                    "path": "/Incidents/Comment"
+                                }
+                            },
+                            "Get_IP_Threat_Intelligence": {
+                                "type": "Http",
+                                "inputs": {
+                                    "uri": "https://graph.microsoft.com/v1.0/security/threatIntelligence/ipAddresses/@{encodeURIComponent(items('For_each_IP_Address'))}",
+                                    "method": "GET",
+                                    "authentication": {
+                                        "audience": "https://graph.microsoft.com",
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@items('For_each_IP_Address')",
+                                            ""
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variable_-_IPAddresses": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Initialize_variable_-_IPAddresses": {
+                "runAfter": {},
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "IPAddresses",
+                            "type": "array",
+                            "value": "@map(filter(triggerBody()?['object']?['properties']?['relatedEntities'], '@equals(item()?[''kind''], ''Ip'')'), '@item()?[''properties''][''address'']')"
+                        }
+                    ]
+                }
+            },
+            "Update_incident": {
+                "runAfter": {
+                    "For_each_IP_Address": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "put",
+                    "body": {
+                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                        "tagsToAdd": {
+                            "TagsToAdd": [
+                                {
+                                    "Tag": "IP-Enriched"
+                                }
+                            ]
+                        }
+                    },
+                    "path": "/Incidents"
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-Block_URL",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

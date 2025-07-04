@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "[resourceGroup().location]"
+    },
+    "easmPlanName": {
+      "value": "DefenderEASM"
+    },
+    "skuName": {
+      "value": "Standard"
+    },
+    "tagsForResources": {
+      "value": {
+        "environment": "production",
+        "purpose": "security",
+        "deployedBy": "ARM Template"
+      }
+    }
+  }
+}

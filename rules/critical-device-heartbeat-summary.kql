@@ -1,0 +1,92 @@
+// Device Heartbeat Summary and Troubleshooting Query
+let summaryTimeRange = 24h;  // Look back further for summary
+let monitoredServers = dynamic([
+    "USWW2ISP01", "USWW2QISP03.qcnet.com", "USWW2QISP06.qcnet.com", 
+    "USWW2WIP19.qcnet.com", "USWW2DBP10.qcnet.com", "usww2lxp25", 
+    "urto-pr-webvm.qcnet.com", "urto-pr-iappvm.qcnet.com",
+    "urto-pr-sqlsdvm.qcnet.com", "USWW2QWIP01", "USWW2QDCP01.qcnet.com",
+    "USWW2QDCP02.qcnet.com"
+]);
+
+// Device Activity Summary
+union
+(
+    DeviceEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | extend HostCustomEntity = tostring(split(DeviceName, '.')[0])
+    | project Timestamp, DeviceName, HostCustomEntity, ActivityType = "DeviceEvent"
+),
+(
+    DeviceNetworkEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | extend HostCustomEntity = tostring(split(DeviceName, '.')[0])
+    | project Timestamp, DeviceName, HostCustomEntity, ActivityType = "NetworkEvent"
+)
+| summarize 
+    TotalEvents = count(),
+    LastSeen = max(Timestamp),
+    FirstSeen = min(Timestamp),
+    HoursSinceLastSeen = now() - max(Timestamp),
+    ActivityTypes = make_set(ActivityType)
+  by HostCustomEntity, DeviceName
+| extend 
+    IsCurrentlyOffline = HoursSinceLastSeen > 10m,
+    IsWeekendOffline = HoursSinceLastSeen > 30m
+| project 
+    HostCustomEntity,
+    DeviceName,
+    TotalEvents,
+    LastSeen,
+    HoursSinceLastSeen,
+    IsCurrentlyOffline,
+    IsWeekendOffline,
+    ActivityTypes
+| order by HoursSinceLastSeen desc
+
+print "";
+print "=== OVERALL STATISTICS ===";
+
+// Overall Statistics
+union
+(
+    DeviceEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | summarize Count = count() by ActivitySource = "DeviceEvents"
+),
+(
+    DeviceNetworkEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | summarize Count = count() by ActivitySource = "DeviceNetworkEvents"
+)
+| project ActivitySource, Count
+
+print "";
+print "=== MISSING DEVICES CHECK ===";
+
+// Missing Devices Check
+let foundDevices = union
+(
+    DeviceEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | distinct DeviceName
+),
+(
+    DeviceNetworkEvents
+    | where Timestamp > ago(summaryTimeRange)
+    | where DeviceName has_any (monitoredServers)
+    | distinct DeviceName
+)
+| distinct DeviceName;
+range i from 0 to array_length(monitoredServers) - 1 step 1
+| extend ExpectedDevice = tostring(monitoredServers[i])
+| join kind=leftouter (foundDevices) on $left.ExpectedDevice == $right.DeviceName
+| project 
+    ExpectedDevice,
+    Found = isnotempty(DeviceName),
+    Status = iff(isnotempty(DeviceName), "Active", "Not Found")
+| order by Found asc

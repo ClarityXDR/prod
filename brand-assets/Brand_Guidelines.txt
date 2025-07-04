@@ -1,0 +1,28 @@
+ClarityXDR Brand Guidelines
+================================
+
+1. Logo
+-------
+Primary lockup (icon + wordmark) and simplified icon only. Maintain clear space equal to the icon height.
+
+2. Color Palette
+----------------
+Lime Green: #7CDB46
+Blaze Orange: #FF4500
+Charcoal:   #0A0E23
+Cool Light: #F5F7FA
+
+3. Typography
+-------------
+Headings: Montserrat Bold
+Body:      Open Sans Regular
+
+4. Usage
+--------
+Use Lime Green for CTAs and highlights, Blaze Orange as accent. Prefer Charcoal text on Cool Light backgrounds.
+
+5. Templates
+------------
+- MS Word letterhead (`ClarityXDR_Letterhead.dotx`)
+- PowerPoint slide deck (`ClarityXDR_Template.pptx`)
+

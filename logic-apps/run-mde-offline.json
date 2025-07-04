@@ -1,0 +1,260 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_entity": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/entity/@{encodeURIComponent('Host')}"
+                }
+            }
+        },
+        "actions": {
+            "Initialize_Host_Array": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "HostArray",
+                            "type": "array",
+                            "value": [
+                                {
+                                    "HostName": "@{triggerBody()?['Entity']?['properties']?['HostName']}",
+                                    "NetBiosName": "@{triggerBody()?['Entity']?['properties']?['NetBiosName']}",
+                                    "DnsDomain": "@{triggerBody()?['Entity']?['properties']?['DnsDomain']}",
+                                    "FQDN": "@{triggerBody()?['Entity']?['properties']?['FQDN']}"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "runAfter": {}
+            },
+            "Initialize_Machine_ID": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "MachineId",
+                            "type": "string",
+                            "value": ""
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Host_Array": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "For_each": {
+                "type": "Foreach",
+                "foreach": "@variables('HostArray')",
+                "actions": {
+                    "Compose_Hostname_for_Search": {
+                        "type": "Compose",
+                        "inputs": "@{coalesce(items('For_each')?['HostName'], items('For_each')?['NetBiosName'], items('For_each')?['FQDN'])}"
+                    },
+                    "Machines_-_Get_machines_by_hostname": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/api/machines",
+                            "queries": {
+                                "$filter": "startswith(tolower(computerDnsName), tolower('@{outputs('Compose_Hostname_for_Search')}'))"
+                            }
+                        },
+                        "runAfter": {
+                            "Compose_Hostname_for_Search": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Condition": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "greater": [
+                                        "@length(body('Machines_-_Get_machines_by_hostname')?['value'])",
+                                        0
+                                    ]
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Set_Machine_ID": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "MachineId",
+                                    "value": "@first(body('Machines_-_Get_machines_by_hostname')?['value'])?['id']"
+                                }
+                            },
+                            "Actions_-_Run_live_response": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "Comment": "MDE Offline Scan Triggered for @{outputs('Compose_Hostname_for_Search')}",
+                                        "Commands": [
+                                            {
+                                                "type": "run mdeoffline.ps1"
+                                            }
+                                        ]
+                                    },
+                                    "path": "/api/machines/@{encodeURIComponent(variables('MachineId'))}/runliveresponse"
+                                },
+                                "runAfter": {
+                                    "Set_Machine_ID": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            },
+                            "For_each_1": {
+                                "type": "Foreach",
+                                "foreach": "@body('Actions_-_Run_live_response')?['commands']",
+                                "actions": {
+                                    "Actions_-_Get_live_response_command_result_download_URI": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['wdatp-1']['connectionId']"
+                                                }
+                                            },
+                                            "method": "get",
+                                            "path": "/api/machineactions/@{encodeURIComponent(body('Actions_-_Run_live_response')?['id'])}/GetLiveResponseResultDownloadLink(index=@{encodeURIComponent(items('For_each_1')?['index'])})"
+                                        }
+                                    },
+                                    "Add_comment_to_incident_(V3)": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azuresentinel-2']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                                "message": "<p class=\"editor-paragraph\">MDE Offline Scan Triggered</p><p class=\"editor-paragraph\">@{body('Actions_-_Run_live_response')?['status']}</p><p class=\"editor-paragraph\">@{items('For_each_1')}</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        },
+                                        "runAfter": {
+                                            "Actions_-_Get_live_response_command_result_download_URI": [
+                                                "Succeeded"
+                                            ]
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Actions_-_Run_live_response": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "Machine_is_not_enrolled_into_MDE": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel-2']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['IncidentArmID']",
+                                            "message": "<p class=\"editor-paragraph\">Host @{outputs('Compose_Hostname_for_Search')} is not enrolled into MDE or not found</p><p class=\"editor-paragraph\">Debug: Searched for hostname starting with '@{outputs('Compose_Hostname_for_Search')}'</p>"
+                                        },
+                                        "path": "/Incidents/Comment"
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Machines_-_Get_machines_by_hostname": [
+                                "Succeeded"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Initialize_Machine_ID": [
+                        "Succeeded"
+                    ]
+                }
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-connection"
+                },
+                "wdatp": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/wdatp",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "wdatp-Run-MDE-Offline-Scan",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "wdatp-1": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/wdatp",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "wdatp-1",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                },
+                "azuresentinel-2": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "azuresentinel-6",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

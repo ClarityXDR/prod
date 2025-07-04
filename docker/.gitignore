@@ -1,0 +1,54 @@
+# Environment files with secrets
+.env
+.env.local
+.env.production
+
+# SSL certificates
+letsencrypt/
+*.pem
+*.key
+*.crt
+
+# Traefik generated files
+traefik/
+!traefik/.gitkeep
+
+# Backup files
+backups/
+*.sql
+*.sql.gz
+*.dump
+
+# Log files
+logs/
+*.log
+
+# User data
+repositories/
+uploads/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Docker volumes (if mounted locally)
+postgres_data/
+redis_data/
+prometheus_data/
+grafana_data/
+
+# Keep directory structure
+!.gitkeep
+!*/

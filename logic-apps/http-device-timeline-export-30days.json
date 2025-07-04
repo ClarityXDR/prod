@@ -1,0 +1,277 @@
+﻿{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence_once_a_week": {
+                "recurrence": {
+                    "interval": 1,
+                    "frequency": "Week",
+                    "timeZone": "Dateline Standard Time"
+                },
+                "evaluatedRecurrence": {
+                    "interval": 1,
+                    "frequency": "Week",
+                    "timeZone": "Dateline Standard Time"
+                },
+                "type": "Recurrence"
+            }
+        },
+        "actions": {
+            "Get_files_(properties_only)": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://biorad.sharepoint.com/sites/InfoSec'))}/tables/@{encodeURIComponent(encodeURIComponent('5adfcad4-7432-4c66-b374-2dfb6f8a9fc8'))}/getfileitems"
+                }
+            },
+            "Parse_JSON": {
+                "runAfter": {
+                    "Get_files_(properties_only)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('Get_files_(properties_only)')?['value']",
+                    "schema": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "@@odata.etag": {
+                                    "type": "string"
+                                },
+                                "ItemInternalId": {
+                                    "type": "string"
+                                },
+                                "ID": {
+                                    "type": "integer"
+                                },
+                                "Modified": {
+                                    "type": "string"
+                                },
+                                "Editor": {
+                                    "type": "object",
+                                    "properties": {
+                                        "@@odata.type": {
+                                            "type": "string"
+                                        },
+                                        "Claims": {
+                                            "type": "string"
+                                        },
+                                        "DisplayName": {
+                                            "type": "string"
+                                        },
+                                        "Email": {
+                                            "type": "string"
+                                        },
+                                        "Picture": {
+                                            "type": "string"
+                                        },
+                                        "Department": {
+                                            "type": "string"
+                                        },
+                                        "JobTitle": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "Editor#Claims": {
+                                    "type": "string"
+                                },
+                                "Created": {
+                                    "type": "string"
+                                },
+                                "Author": {
+                                    "type": "object",
+                                    "properties": {
+                                        "@@odata.type": {
+                                            "type": "string"
+                                        },
+                                        "Claims": {
+                                            "type": "string"
+                                        },
+                                        "DisplayName": {
+                                            "type": "string"
+                                        },
+                                        "Email": {
+                                            "type": "string"
+                                        },
+                                        "Picture": {
+                                            "type": "string"
+                                        },
+                                        "Department": {
+                                            "type": "string"
+                                        },
+                                        "JobTitle": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "Author#Claims": {
+                                    "type": "string"
+                                },
+                                "OData__DisplayName": {
+                                    "type": "string"
+                                },
+                                "{Identifier}": {
+                                    "type": "string"
+                                },
+                                "{IsFolder}": {
+                                    "type": "boolean"
+                                },
+                                "{Thumbnail}": {
+                                    "type": "object",
+                                    "properties": {
+                                        "Large": {},
+                                        "Medium": {},
+                                        "Small": {}
+                                    }
+                                },
+                                "{Link}": {
+                                    "type": "string"
+                                },
+                                "{Name}": {
+                                    "type": "string"
+                                },
+                                "{FilenameWithExtension}": {
+                                    "type": "string"
+                                },
+                                "{Path}": {
+                                    "type": "string"
+                                },
+                                "{FullPath}": {
+                                    "type": "string"
+                                },
+                                "{ContentType}": {
+                                    "type": "object",
+                                    "properties": {
+                                        "@@odata.type": {
+                                            "type": "string"
+                                        },
+                                        "Id": {
+                                            "type": "string"
+                                        },
+                                        "Name": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "{ContentType}#Id": {
+                                    "type": "string"
+                                },
+                                "{IsCheckedOut}": {
+                                    "type": "boolean"
+                                },
+                                "{DriveId}": {
+                                    "type": "string"
+                                },
+                                "{DriveItemId}": {
+                                    "type": "string"
+                                },
+                                "{VersionNumber}": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "@@odata.etag",
+                                "ItemInternalId",
+                                "ID",
+                                "Modified",
+                                "Editor",
+                                "Editor#Claims",
+                                "Created",
+                                "Author",
+                                "Author#Claims",
+                                "OData__DisplayName",
+                                "{Identifier}",
+                                "{IsFolder}",
+                                "{Thumbnail}",
+                                "{Link}",
+                                "{Name}",
+                                "{FilenameWithExtension}",
+                                "{Path}",
+                                "{FullPath}",
+                                "{ContentType}",
+                                "{ContentType}#Id",
+                                "{IsCheckedOut}",
+                                "{DriveId}",
+                                "{DriveItemId}",
+                                "{VersionNumber}"
+                            ]
+                        }
+                    }
+                }
+            },
+            "GetAllFilesArray": {
+                "runAfter": {
+                    "Parse_JSON": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "GetFilesArray",
+                            "type": "array",
+                            "value": "@body('Parse_JSON')"
+                        }
+                    ]
+                }
+            },
+            "For_each": {
+                "foreach": "@variables('GetFilesArray')",
+                "actions": {
+                    "Get_file_content": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://biorad.sharepoint.com/sites/InfoSec'))}/files/@{encodeURIComponent(items('For_each')?['{Identifier}'])}/content",
+                            "queries": {
+                                "inferContentType": true
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "GetAllFilesArray": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "sharepointonline": {
+                    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/region/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/YourResourceGroup/providers/Microsoft.Web/connections/your-connection",
+                    "connectionName": "sharepointonline-2"
+                }
+            }
+        }
+    }
+}

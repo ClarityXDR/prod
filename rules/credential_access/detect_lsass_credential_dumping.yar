@@ -1,0 +1,34 @@
+rule: DetectLSASSCredentialDumping
+meta:
+  title: "Detect possible credential dumping (LSASS access)"
+  author: "Auto-Converted"
+  date: "2025-06-08"
+  mitre_techniques: ["T1003.001"]
+  severity: "high"
+  description: "Detects suspicious access to LSASS for credential dumping using procdump or mimikatz."
+  references: []
+
+tables:
+  primary: "DeviceProcessEvents"
+
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "lsass.exe"
+    InitiatingProcessCommandLine|contains:
+      - "procdump"
+      - "mimikatz"
+  filter: {}
+
+timeframe: "1d"
+frequency: "1h"
+condition: "selection"
+
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+
+output:
+  required_columns: ["Timestamp", "DeviceName", "AccountName", "InitiatingProcessCommandLine"]
+  entity_columns: []

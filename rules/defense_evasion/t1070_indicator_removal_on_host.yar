@@ -1,0 +1,29 @@
+rule: IndicatorRemovalOnHost
+meta:
+  title: "Indicator Removal on Host (T1070)"
+  author: "Auto-Generated"
+  date: "2025-06-08"
+  mitre_techniques: ["T1070"]
+  severity: "medium"
+  description: "Detects attempts to clear logs or delete forensic artifacts."
+tables:
+  primary: "DeviceProcessEvents"
+detection:
+  selection:
+    ProcessCommandLine|contains:
+      - "wevtutil cl"
+      - "del *.evtx"
+      - "Clear-EventLog"
+      - "Remove-EventLog"
+      - "rm -rf /var/log"
+  filter: {}
+timeframe: "7d"
+frequency: "1h"
+condition: "selection"
+response:
+  actions:
+    - type: "collect_investigation_package"
+      target: "DeviceId"
+output:
+  required_columns: ["Timestamp", "DeviceName", "ProcessCommandLine"]
+  entity_columns: []
