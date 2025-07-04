@@ -69,15 +69,43 @@ install_packages() {
     print_message $BLUE "Updating package list..."
     apt-get update -qq
     
+    # Fix any broken packages and held packages
+    print_message $BLUE "Fixing package issues..."
+    apt-get install -f -y -qq
+    dpkg --configure -a
+    
+    # Check for held packages and release them
+    print_message $BLUE "Checking for held packages..."
+    if dpkg --get-selections | grep -q hold; then
+        print_message $YELLOW "Found held packages, attempting to resolve..."
+        apt-mark unhold $(dpkg --get-selections | grep hold | awk '{print $1}')
+    fi
+    
     # Install packages with proper error handling
     print_message $BLUE "Installing curl and git..."
     apt-get install -y -qq curl git
     
-    print_message $BLUE "Installing Docker..."
-    apt-get install -y -qq docker.io
+    print_message $BLUE "Installing Docker via official script..."
+    # Use Docker's official installation script which handles dependencies better
+    if ! command -v docker &> /dev/null; then
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm get-docker.sh
+    else
+        print_message $GREEN "Docker already installed"
+    fi
     
     print_message $BLUE "Installing Docker Compose..."
-    apt-get install -y -qq docker-compose
+    if ! command -v docker-compose &> /dev/null; then
+        # Install docker-compose via pip if apt fails
+        if ! apt-get install -y -qq docker-compose; then
+            print_message $YELLOW "Installing docker-compose via pip..."
+            apt-get install -y -qq python3-pip
+            pip3 install docker-compose
+        fi
+    else
+        print_message $GREEN "Docker Compose already installed"
+    fi
     
     print_message $BLUE "Installing utilities..."
     apt-get install -y -qq openssl apache2-utils
@@ -92,6 +120,11 @@ install_packages() {
         usermod -aG docker "$SUDO_USER"
         print_message $GREEN "Added $SUDO_USER to docker group"
     fi
+    
+    # Verify installations
+    print_message $BLUE "Verifying installations..."
+    docker --version || (print_message $RED "Docker installation failed" && exit 1)
+    docker-compose --version || (print_message $RED "Docker Compose installation failed" && exit 1)
     
     print_message $GREEN "Package installation completed"
 }
