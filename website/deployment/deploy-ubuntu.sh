@@ -221,7 +221,7 @@ collect_configuration() {
     # Domain input with validation
     while true; do
         echo -n "Enter your domain name (e.g., portal.clarityxdr.com): "
-        read -r DOMAIN_NAME
+        read -r DOMAIN_NAME < /dev/tty
         if validate_input "$DOMAIN_NAME" "domain"; then
             break
         fi
@@ -230,7 +230,7 @@ collect_configuration() {
     # Email input with validation
     while true; do
         echo -n "Enter your email for SSL certificates: "
-        read -r ACME_EMAIL
+        read -r ACME_EMAIL < /dev/tty
         if validate_input "$ACME_EMAIL" "email"; then
             break
         fi
@@ -238,17 +238,17 @@ collect_configuration() {
     
     # Optional OpenAI key
     echo -n "Enter OpenAI API Key (optional, press Enter to skip): "
-    read -r OPENAI_API_KEY
+    read -r OPENAI_API_KEY < /dev/tty
     
     # Optional Azure credentials for Logic App deployment
     echo ""
     echo "Azure credentials for Logic App deployment (optional, press Enter to skip each):"
     echo -n "Azure Tenant ID: "
-    read -r AZURE_TENANT_ID
+    read -r AZURE_TENANT_ID < /dev/tty
     echo -n "Azure Client ID: "
-    read -r AZURE_CLIENT_ID
+    read -r AZURE_CLIENT_ID < /dev/tty
     echo -n "Azure Client Secret: "
-    read -rs AZURE_CLIENT_SECRET
+    read -rs AZURE_CLIENT_SECRET < /dev/tty
     echo ""
     
     print_message $GREEN "Configuration completed"
