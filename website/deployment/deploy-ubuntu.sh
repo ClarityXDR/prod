@@ -13,9 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 print_message() {
-    local color=$1
-    local message=$2
-    echo -e "${color}===> ${message}${NC}"
+    echo -e "${1}===> ${2}${NC}"
 }
 
 print_banner() {
@@ -34,37 +32,6 @@ print_banner() {
     echo ""
 }
 
-generate_secure_password() {
-    openssl rand -base64 32 | tr -d "=+/" | cut -c1-25
-}
-
-generate_encryption_key() {
-    openssl rand -base64 24 | tr -d "=+/"
-}
-
-generate_jwt_secret() {
-    openssl rand -base64 32 | tr -d "=+/"
-}
-
-validate_domain() {
-    local domain=$1
-    if [[ ! $domain =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
-        return 1
-    fi
-    if [[ $domain =~ ^https?:// ]]; then
-        return 1
-    fi
-    return 0
-}
-
-validate_email() {
-    local email=$1
-    if [[ $email =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-        return 0
-    fi
-    return 1
-}
-
 check_prerequisites() {
     print_message $BLUE "Checking prerequisites..."
     
@@ -80,277 +47,206 @@ check_prerequisites() {
     
     print_message $BLUE "System specs: ${ram_gb}GB RAM, ${cpu_cores} CPU cores"
     
-    if [[ $ram_gb -lt 4 ]]; then
+    if [[ $ram_gb -lt 3 ]]; then
         print_message $YELLOW "Warning: Less than 4GB RAM detected. ClarityXDR may run slowly."
-        read -p "Continue anyway? (y/N): " continue_low_ram
+        echo -n "Continue anyway? (y/N): "
+        read continue_low_ram
         if [[ ! "$continue_low_ram" =~ ^[Yy]$ ]]; then
             exit 1
         fi
     fi
     
-    # Update package list with better error handling
+    print_message $GREEN "Prerequisites check completed"
+}
+
+install_packages() {
+    print_message $BLUE "Installing required packages..."
+    
+    # Set non-interactive mode
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # Update package list
     print_message $BLUE "Updating package list..."
-    if ! apt-get update; then
-        print_message $RED "Failed to update package list. Please check your internet connection."
-        exit 1
-    fi
+    apt-get update -qq
     
-    # Install required packages one by one with progress
-    local packages=("curl" "git" "docker.io" "docker-compose" "openssl" "apache2-utils")
+    # Install packages with proper error handling
+    print_message $BLUE "Installing curl and git..."
+    apt-get install -y -qq curl git
     
-    for package in "${packages[@]}"; do
-        print_message $BLUE "Installing $package..."
-        if ! apt-get install -y "$package"; then
-            print_message $RED "Failed to install $package"
-            exit 1
-        fi
-    done
+    print_message $BLUE "Installing Docker..."
+    apt-get install -y -qq docker.io
     
-    # Start and enable Docker
+    print_message $BLUE "Installing Docker Compose..."
+    apt-get install -y -qq docker-compose
+    
+    print_message $BLUE "Installing utilities..."
+    apt-get install -y -qq openssl apache2-utils
+    
+    # Start Docker
     print_message $BLUE "Starting Docker service..."
     systemctl start docker
     systemctl enable docker
     
-    # Add current user to docker group if not root
+    # Add user to docker group
     if [[ -n "$SUDO_USER" ]]; then
         usermod -aG docker "$SUDO_USER"
         print_message $GREEN "Added $SUDO_USER to docker group"
     fi
     
-    # Verify Docker is working
-    if ! docker --version > /dev/null 2>&1; then
-        print_message $RED "Docker installation failed"
-        exit 1
-    fi
-    
-    print_message $GREEN "Prerequisites check completed successfully"
+    print_message $GREEN "Package installation completed"
 }
 
 collect_configuration() {
-    print_message $BLUE "Collecting configuration information..."
+    print_message $BLUE "Configuration setup..."
     echo ""
     
-    # Domain name
-    while true; do
-        echo -n "Enter your domain name (e.g., portal.clarityxdr.com): "
-        read DOMAIN_NAME
-        if validate_domain "$DOMAIN_NAME"; then
-            break
-        else
-            print_message $RED "Invalid domain name. Please enter a valid FQDN without http:// or https://"
-        fi
-    done
+    # Simple domain input
+    echo -n "Enter your domain name (e.g., portal.clarityxdr.com): "
+    read DOMAIN_NAME
     
-    # Email for SSL certificates
-    while true; do
-        echo -n "Enter your email for SSL certificates: "
-        read ACME_EMAIL
-        if validate_email "$ACME_EMAIL"; then
-            break
-        else
-            print_message $RED "Invalid email address"
-        fi
-    done
+    # Simple email input  
+    echo -n "Enter your email for SSL certificates: "
+    read ACME_EMAIL
     
-    # OpenAI API Key
-    echo -n "Enter your OpenAI API Key (optional, press Enter to skip): "
+    # Optional OpenAI key
+    echo -n "Enter OpenAI API Key (optional, press Enter to skip): "
     read OPENAI_API_KEY
     
-    # Azure OpenAI (optional)
-    echo -n "Enter Azure OpenAI Endpoint (optional, press Enter to skip): "
-    read AZURE_OPENAI_ENDPOINT
-    if [[ -n "$AZURE_OPENAI_ENDPOINT" ]]; then
-        echo -n "Enter Azure OpenAI API Key: "
-        read AZURE_OPENAI_API_KEY
-        echo -n "Enter Azure OpenAI Deployment Name: "
-        read AZURE_OPENAI_DEPLOYMENT
-    fi
-    
-    # Generate secure passwords and keys
-    print_message $BLUE "Generating secure passwords and encryption keys..."
-    POSTGRES_PASSWORD=$(generate_secure_password)
-    REDIS_PASSWORD=$(generate_secure_password)
-    ENCRYPTION_KEY=$(generate_encryption_key)
-    JWT_SECRET=$(generate_jwt_secret)
-    
-    # Generate Traefik dashboard auth
-    TRAEFIK_ADMIN_PASSWORD=$(generate_secure_password)
+    # Generate secure values
+    print_message $BLUE "Generating secure passwords..."
+    POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    ENCRYPTION_KEY=$(openssl rand -base64 24 | tr -d "=+/")
+    JWT_SECRET=$(openssl rand -base64 32 | tr -d "=+/")
+    TRAEFIK_ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/")
     TRAEFIK_DASHBOARD_AUTH=$(htpasswd -nb admin "$TRAEFIK_ADMIN_PASSWORD")
     
-    print_message $GREEN "Configuration collected successfully"
+    print_message $GREEN "Configuration completed"
 }
 
 setup_application() {
-    print_message $BLUE "Setting up ClarityXDR application..."
+    print_message $BLUE "Setting up ClarityXDR..."
     
-    # Create application directory
+    # Create directory
     mkdir -p /opt/clarityxdr
     cd /opt/clarityxdr
     
-    # Remove any existing installation
+    # Clone repo
+    print_message $BLUE "Downloading from GitHub..."
     if [[ -d ".git" ]]; then
-        print_message $YELLOW "Existing installation found, updating..."
         git pull
     else
-        # Clone repository
-        print_message $BLUE "Downloading ClarityXDR from GitHub..."
         git clone https://github.com/ClarityXDR/prod.git .
     fi
     
     cd website
     
-    # Create required directories
+    # Create directories
     mkdir -p letsencrypt backups repositories uploads client-rules
-    mkdir -p agent-orchestrator/app/routers
     
     # Create .env file
-    print_message $BLUE "Creating environment configuration..."
+    print_message $BLUE "Creating configuration..."
     cat > .env << EOF
-# Domain Configuration
 DOMAIN_NAME=$DOMAIN_NAME
 ACME_EMAIL=$ACME_EMAIL
 TRAEFIK_DASHBOARD_AUTH=$TRAEFIK_DASHBOARD_AUTH
-
-# Database Configuration
 POSTGRES_DB=clarityxdr
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-
-# Redis Configuration
 REDIS_PASSWORD=$REDIS_PASSWORD
-
-# Security
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 JWT_SECRET=$JWT_SECRET
 JWT_EXPIRES_IN=24h
-
-# API Configuration
 REACT_APP_API_URL=https://api.$DOMAIN_NAME
-
-# AI Configuration
 OPENAI_API_KEY=$OPENAI_API_KEY
-AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT
-AZURE_OPENAI_API_KEY=$AZURE_OPENAI_API_KEY
-AZURE_OPENAI_DEPLOYMENT=$AZURE_OPENAI_DEPLOYMENT
-
-# KQL Configuration
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_DEPLOYMENT=
 KQL_TIMEOUT=60
 AGENT_QUERY_TIMEOUT=300
-
-# Logging
 LOG_LEVEL=info
-
-# Environment
 NODE_ENV=production
 EOF
     
     print_message $GREEN "Application setup completed"
 }
 
-apply_optimizations() {
-    print_message $BLUE "System optimizations available..."
-    
-    # Make optimization script executable if it exists
-    if [[ -f "ubuntu-optimizations.sh" ]]; then
-        chmod +x ubuntu-optimizations.sh
-        
-        echo -n "Apply system optimizations for Docker? (Y/n): "
-        read apply_opts
-        if [[ "$apply_opts" =~ ^[Nn]$ ]]; then
-            print_message $YELLOW "Skipping system optimizations"
-        else
-            print_message $BLUE "Applying optimizations..."
-            echo "y" | ./ubuntu-optimizations.sh
-            print_message $GREEN "System optimizations applied"
-        fi
-    else
-        print_message $YELLOW "Optimization script not found, skipping"
-    fi
-}
-
 start_services() {
     print_message $BLUE "Starting ClarityXDR services..."
     
-    # Check if docker-compose.yml exists
+    # Check if compose file exists
     if [[ ! -f "docker-compose.yml" ]]; then
-        print_message $RED "docker-compose.yml not found in $(pwd)"
-        print_message $RED "Please check the repository structure"
+        print_message $RED "docker-compose.yml not found!"
         exit 1
     fi
     
-    # Pull images and start services
-    print_message $BLUE "Pulling Docker images..."
-    docker-compose pull
-    
-    print_message $BLUE "Starting services..."
+    # Start services
+    print_message $BLUE "Starting Docker containers..."
     docker-compose up -d
     
-    # Wait for services to start
-    print_message $BLUE "Waiting for services to initialize..."
-    sleep 30
+    # Brief wait
+    print_message $BLUE "Waiting for services to start..."
+    sleep 15
     
-    # Check service health
-    print_message $BLUE "Checking service status..."
-    docker-compose ps
-    
-    print_message $GREEN "Services started! Check above for status."
+    print_message $GREEN "Services started!"
 }
 
-display_completion_info() {
+display_results() {
     print_message $GREEN "=========================================="
     print_message $GREEN "  ClarityXDR Deployment Complete!"
     print_message $GREEN "=========================================="
     echo ""
-    echo -e "${BLUE}Application URLs:${NC}"
-    echo "  • Main Application: https://$DOMAIN_NAME"
-    echo "  • API Endpoint: https://api.$DOMAIN_NAME"
-    echo "  • Traefik Dashboard: https://traefik.$DOMAIN_NAME"
+    echo "Application URLs:"
+    echo "  • Main: https://$DOMAIN_NAME"
+    echo "  • API: https://api.$DOMAIN_NAME"
+    echo "  • Dashboard: https://traefik.$DOMAIN_NAME"
     echo ""
-    echo -e "${BLUE}Dashboard Credentials:${NC}"
+    echo "Traefik Dashboard Login:"
     echo "  • Username: admin"
     echo "  • Password: $TRAEFIK_ADMIN_PASSWORD"
     echo ""
-    echo -e "${BLUE}Important Notes:${NC}"
-    echo "  • Make sure DNS for $DOMAIN_NAME points to this server"
+    echo "Important:"
+    echo "  • Point your DNS records to this server's IP"
+    echo "  • Open firewall ports 80 and 443"
     echo "  • SSL certificates will be generated automatically"
-    echo "  • Allow firewall access to ports 80 and 443"
     echo ""
-    echo -e "${BLUE}Management Commands:${NC}"
+    echo "Commands:"
     echo "  • View logs: cd /opt/clarityxdr/website && docker-compose logs -f"
     echo "  • Restart: cd /opt/clarityxdr/website && docker-compose restart"
-    echo "  • Stop: cd /opt/clarityxdr/website && docker-compose down"
     echo ""
     
-    # Save credentials to file
-    cat > /opt/clarityxdr/credentials.txt << EOF
-ClarityXDR Deployment Credentials
-Generated: $(date)
+    # Save credentials
+    cat > /opt/clarityxdr/CREDENTIALS.txt << EOF
+ClarityXDR Credentials - $(date)
 
-Application URLs:
-- Main Application: https://$DOMAIN_NAME
-- API Endpoint: https://api.$DOMAIN_NAME
-- Traefik Dashboard: https://traefik.$DOMAIN_NAME
+URLs:
+- Main: https://$DOMAIN_NAME
+- API: https://api.$DOMAIN_NAME
+- Dashboard: https://traefik.$DOMAIN_NAME
 
-Dashboard Credentials:
+Traefik Login:
 - Username: admin
 - Password: $TRAEFIK_ADMIN_PASSWORD
 
-Database Password: $POSTGRES_PASSWORD
-Redis Password: $REDIS_PASSWORD
+Database:
+- Password: $POSTGRES_PASSWORD
+
+Redis:
+- Password: $REDIS_PASSWORD
 EOF
     
-    chmod 600 /opt/clarityxdr/credentials.txt
-    print_message $GREEN "Credentials saved to /opt/clarityxdr/credentials.txt"
+    chmod 600 /opt/clarityxdr/CREDENTIALS.txt
+    print_message $GREEN "Credentials saved to /opt/clarityxdr/CREDENTIALS.txt"
 }
 
 main() {
     print_banner
     check_prerequisites
+    install_packages
     collect_configuration
     setup_application
-    apply_optimizations
     start_services
-    display_completion_info
+    display_results
 }
 
 # Run main function
