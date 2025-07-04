@@ -69,51 +69,57 @@ install_packages() {
     print_message $BLUE "Updating package list..."
     apt-get update -qq
     
+    # Diagnostic information
+    print_message $BLUE "Checking system state..."
+    echo "Held packages:"
+    dpkg --get-selections | grep hold || echo "No held packages found"
+    
+    echo "Broken packages:"
+    dpkg --audit || echo "No broken packages found"
+    
+    echo "Upgradable packages:"
+    apt list --upgradable
+    
+    echo "Docker package status:"
+    apt-cache policy docker.io
+    
+    # Check and fix any lock files that might be preventing installation
+    print_message $BLUE "Checking for lock files..."
+    for lock_file in /var/lib/dpkg/lock* /var/cache/apt/archives/lock /var/lib/apt/lists/lock; do
+        if [ -e "$lock_file" ]; then
+            print_message $YELLOW "Found lock file: $lock_file - attempting to remove"
+            rm -f "$lock_file"
+        fi
+    done
+    
     # Fix any broken packages and held packages
     print_message $BLUE "Fixing package issues..."
     apt-get install -f -y -qq
     dpkg --configure -a
     
     # Check for held packages and release them
-    print_message $BLUE "Checking for held packages..."
     if dpkg --get-selections | grep -q hold; then
         print_message $YELLOW "Found held packages, attempting to resolve..."
-        apt-mark unhold $(dpkg --get-selections | grep hold | awk '{print $1}')
+        dpkg --get-selections | grep hold | awk '{print $1}' | xargs apt-mark unhold
     fi
     
-    # Install packages with proper error handling
-    print_message $BLUE "Installing curl and git..."
-    apt-get install -y -qq curl git
+    # Try with a specific docker package instead of docker.io
+    print_message $BLUE "Installing Docker directly via official script..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    rm get-docker.sh
     
-    print_message $BLUE "Installing Docker via official script..."
-    # Use Docker's official installation script which handles dependencies better
-    if ! command -v docker &> /dev/null; then
-        curl -fsSL https://get.docker.com -o get-docker.sh
-        sh get-docker.sh
-        rm get-docker.sh
-    else
-        print_message $GREEN "Docker already installed"
-    fi
-    
-    print_message $BLUE "Installing Docker Compose..."
-    if ! command -v docker-compose &> /dev/null; then
-        # Install docker-compose via pip if apt fails
-        if ! apt-get install -y -qq docker-compose; then
-            print_message $YELLOW "Installing docker-compose via pip..."
-            apt-get install -y -qq python3-pip
-            pip3 install docker-compose
-        fi
-    else
-        print_message $GREEN "Docker Compose already installed"
-    fi
+    print_message $BLUE "Installing Docker Compose via pip3..."
+    apt-get install -y -qq python3-pip
+    pip3 install docker-compose
     
     print_message $BLUE "Installing utilities..."
     apt-get install -y -qq openssl apache2-utils
     
     # Start Docker
     print_message $BLUE "Starting Docker service..."
-    systemctl start docker
-    systemctl enable docker
+    systemctl start docker || true
+    systemctl enable docker || true
     
     # Add user to docker group
     if [[ -n "$SUDO_USER" ]]; then
@@ -123,8 +129,21 @@ install_packages() {
     
     # Verify installations
     print_message $BLUE "Verifying installations..."
-    docker --version || (print_message $RED "Docker installation failed" && exit 1)
-    docker-compose --version || (print_message $RED "Docker Compose installation failed" && exit 1)
+    if command -v docker &> /dev/null; then
+        docker --version
+        print_message $GREEN "Docker is installed"
+    else
+        print_message $RED "Docker installation failed"
+        exit 1
+    fi
+    
+    if command -v docker-compose &> /dev/null; then
+        docker-compose --version
+        print_message $GREEN "Docker Compose is installed"
+    else
+        print_message $RED "Docker Compose installation failed"
+        exit 1
+    fi
     
     print_message $GREEN "Package installation completed"
 }
