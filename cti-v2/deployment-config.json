@@ -1,0 +1,208 @@
+{
+    "$schema": "https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/deployment-config-schema.json",
+    "deploymentName": "ClarityXDR-CTI-Production",
+    "environment": "Production",
+    "version": "1.0.0",
+    
+    "azure": {
+        "tenantId": "YOUR_TENANT_ID",
+        "subscriptionId": "YOUR_SUBSCRIPTION_ID",
+        "resourceGroup": {
+            "name": "CTI-RG",
+            "location": "eastus"
+        },
+        "naming": {
+            "prefix": "cti",
+            "suffix": "prod"
+        }
+    },
+    
+    "sharepoint": {
+        "tenantUrl": "https://YOURDOMAIN-admin.sharepoint.com",
+        "siteUrl": "https://YOURDOMAIN.sharepoint.com/sites/CTI",
+        "lists": {
+            "indicators": "ThreatIndicatorsList",
+            "incidents": "SecurityIncidents",
+            "intelligence": "ThreatIntelligence",
+            "mitreMapping": "MITRECoverage"
+        }
+    },
+    
+    "security": {
+        "appRegistration": {
+            "name": "ClarityXDR-CTI-Automation",
+            "certificateValidityDays": 730,
+            "permissions": {
+                "microsoftGraph": [
+                    "ThreatIndicators.ReadWrite.OwnedBy",
+                    "SecurityEvents.Read.All",
+                    "Policy.Read.All",
+                    "Policy.ReadWrite.ConditionalAccess",
+                    "IdentityRiskEvent.Read.All"
+                ],
+                "exchange": [
+                    "Exchange.ManageAsApp"
+                ],
+                "defender": [
+                    "Ti.ReadWrite",
+                    "AdvancedHunting.Read.All"
+                ]
+            }
+        },
+        "serviceAccount": {
+            "upn": "svc-cti@YOURDOMAIN.com",
+            "passwordRotationDays": 90
+        }
+    },
+    
+    "sentinel": {
+        "workspaceName": "CTI-Sentinel-Workspace",
+        "retentionDays": 90,
+        "dailyQuotaGb": 10,
+        "dataConnectors": [
+            "Office365",
+            "AzureActiveDirectory",
+            "MicrosoftDefenderAdvancedThreatProtection",
+            "MicrosoftCloudAppSecurity"
+        ]
+    },
+    
+    "automation": {
+        "logicApps": {
+            "ingestion": {
+                "name": "CTI-IoC-Ingestion",
+                "schedule": "manual",
+                "retryPolicy": {
+                    "count": 3,
+                    "interval": "PT1M"
+                }
+            },
+            "validation": {
+                "name": "CTI-Validation",
+                "schedule": "0 */6 * * *",
+                "enabled": true
+            },
+            "deployment": {
+                "name": "CTI-Deployment",
+                "schedule": "manual",
+                "parallelism": 5
+            }
+        },
+        "runbooks": {
+            "dailySync": {
+                "name": "CTI-DailySync",
+                "schedule": "0 2 * * *",
+                "timezone": "UTC"
+            },
+            "healthCheck": {
+                "name": "CTI-HealthCheck",
+                "schedule": "0 * * * *",
+                "alertOnFailure": true
+            }
+        }
+    },
+    
+    "integrations": {
+        "platforms": {
+            "microsoftDefender": {
+                "enabled": true,
+                "indicatorTypes": ["FileHash", "IPAddress", "URL", "Domain", "Certificate"],
+                "defaultAction": "Block",
+                "defaultExpiration": 90
+            },
+            "azureAD": {
+                "enabled": true,
+                "indicatorTypes": ["IPAddress"],
+                "createNamedLocations": true,
+                "blockSignins": true
+            },
+            "cloudAppSecurity": {
+                "enabled": true,
+                "indicatorTypes": ["IPAddress"],
+                "markAsRisky": true,
+                "createPolicies": true
+            },
+            "exchangeOnline": {
+                "enabled": true,
+                "indicatorTypes": ["IPAddress", "URL", "Domain", "Email"],
+                "connectionFilter": true,
+                "tenantAllowBlockList": true
+            }
+        },
+        "externalFeeds": {
+            "virusTotal": {
+                "enabled": false,
+                "apiKey": "",
+                "validationThreshold": 5
+            },
+            "alienVaultOTX": {
+                "enabled": false,
+                "apiKey": ""
+            }
+        }
+    },
+    
+    "deployment": {
+        "validation": {
+            "preDeployment": true,
+            "postDeployment": true,
+            "smokeTests": true
+        },
+        "rollback": {
+            "enabled": true,
+            "automaticOnFailure": false
+        },
+        "notifications": {
+            "email": {
+                "enabled": true,
+                "recipients": ["soc-team@YOURDOMAIN.com"],
+                "onSuccess": true,
+                "onFailure": true
+            },
+            "teams": {
+                "enabled": true,
+                "webhookUrl": "",
+                "channel": "Security Operations"
+            }
+        }
+    },
+    
+    "monitoring": {
+        "alerts": {
+            "deploymentFailure": {
+                "enabled": true,
+                "severity": "High"
+            },
+            "indicatorBacklog": {
+                "enabled": true,
+                "threshold": 100,
+                "severity": "Medium"
+            },
+            "apiQuotaExceeded": {
+                "enabled": true,
+                "severity": "High"
+            }
+        },
+        "metrics": {
+            "logAnalytics": true,
+            "applicationInsights": false
+        }
+    },
+    
+    "compliance": {
+        "dataResidency": "US",
+        "retentionPolicies": {
+            "indicators": 365,
+            "auditLogs": 2555,
+            "deploymentLogs": 90
+        },
+        "encryption": {
+            "atRest": true,
+            "inTransit": true,
+            "keyVault": {
+                "enabled": false,
+                "name": ""
+            }
+        }
+    }
+}
