@@ -334,6 +334,45 @@ foreach ($permission in $graphPermissions) {
 Write-Success "✓ Microsoft Graph permissions added"
 
 ###############################################################################
+# 6️⃣ Microsoft Intune / Device Management Permissions [NEW]                  #
+###############################################################################
+Write-Host "Adding Microsoft Intune/Device Management permissions..."
+Write-Host "  - Device Management & Configuration" -ForegroundColor DarkGray
+Write-Host "  - Managed Devices (Read/Write)" -ForegroundColor DarkGray
+Write-Host "  - Autopilot Operations" -ForegroundColor DarkGray
+Write-Host "  - Device Compliance & Apps" -ForegroundColor DarkGray
+
+$intunePermissions = @(
+    # Device Management - Core
+    "2f51be20-0bb4-4fed-bf7b-db946066c75e=Role", # DeviceManagementManagedDevices.Read.All
+    "243333ab-4d21-40cb-a475-36241daa0842=Role", # DeviceManagementManagedDevices.ReadWrite.All
+    "06a5fe6d-c49d-46a7-b082-56b1b14103c7=Role", # DeviceManagementServiceConfig.Read.All
+    "5ac13192-7ace-4fcf-b828-1a26f28068ee=Role", # DeviceManagementServiceConfig.ReadWrite.All
+    
+    # Device Configuration & Compliance
+    "dc377aa6-52d8-4e23-b271-2a7ae04cedf3=Role", # DeviceManagementConfiguration.Read.All
+    "9241abd9-d0e6-425a-bd4f-47ba86e767a4=Role", # DeviceManagementConfiguration.ReadWrite.All
+    "58ca0d9a-1575-47e1-a3cb-007ef2e4583b=Role", # DeviceManagementApps.Read.All
+    "78145de6-330d-4800-a6ce-494ff2d33d07=Role", # DeviceManagementApps.ReadWrite.All
+    
+    # RBAC and Device Actions
+    "e330c4f0-4170-414e-a55a-2f022ec2b57b=Role", # DeviceManagementRBAC.Read.All
+    "5b07b0dd-2377-4e44-a38d-703f09a0dc3c=Role", # DeviceManagementManagedDevices.PrivilegedOperations.All
+    
+    # Additional permissions for comprehensive device management
+    "7438b122-aefc-4978-80ed-43db9fcc7715=Role", # Device.Read.All
+    "1138cb37-bd11-4084-a2b7-9f71582aeddb=Role", # Device.ReadWrite.All
+    "4edf5f54-4666-44af-9de9-0144fb4b6e8c=Role", # DeviceManagementApps.ReadWrite.All (duplicate check)
+    "2f3e6f8c-093b-4c57-a58b-ba5ce494a169=Role"  # WindowsUpdates.ReadWrite.All
+)
+
+foreach ($permission in $intunePermissions) {
+    az ad app permission add --id $appId --api "00000003-0000-0000-c000-000000000000" --api-permissions $permission --output none 2>$null
+}
+
+Write-Success "✓ Microsoft Intune/Device Management permissions added"
+
+###############################################################################
 # 2️⃣ Microsoft Defender for Endpoint [CORRECTED]                            #
 ###############################################################################
 Write-Host "Adding Microsoft Defender for Endpoint permissions..."
