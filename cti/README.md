@@ -1,294 +1,240 @@
-# Cyber Threat Intelligence (CTI)
+# 🚀 ClarityXDR CTI - One-Click Deployment Guide
 
-This directory contains the Central Threat Intelligence Indicator Management, Reputation and Reporting solution for ClarityXDR platform.
+**Go from Blue to Green in under 30 minutes!**
 
-## 📋 Overview
+## 🎯 Quick Start - The "One-Click" Deploy
 
-The CTI module provides a centralized indicator management system with multi-platform deployment:
-
-- **Centralized Management**: SharePoint List-backed indicator database with Teams frontend
-- **Multi-Platform Deployment**: Automated deployment to all security platforms
-- **Bidirectional Sync**: Changes in any system are reflected everywhere
-- **Lifecycle Management**: Complete lifecycle from ingestion to retirement
-- **Reputation Tracking**: Monitor and respond to reputation changes
-
-## 📁 Solution Architecture
-
-```
-┌─────────────────────────┐      ┌─────────────────────────────┐
-│                         │      │                             │
-│    Teams Interface      │◄────►│   SharePoint Indicator List │
-│                         │      │                             │
-└─────────────────────────┘      └───────────────┬─────────────┘
-                                                 │
-                                                 ▼
-                                  ┌─────────────────────────────┐
-                                  │                             │
-                                  │      Logic Apps Layer       │
-                                  │                             │
-                                  └───────┬───────┬───────┬─────┘
-                                          │       │       │
-         ┌───────────────────────────────┐│       │       │
-         ▼                               ▼│       ▼       ▼
-┌──────────────────┐    ┌──────────────────┐  ┌───────┐  ┌───────────────────┐
-│                  │    │                  │  │       │  │                   │
-│ Microsoft 365    │    │ Azure            │  │ On-   │  │ Third-Party       │
-│ Security Stack   │    │ Security Stack   │  │ Prem  │  │ Security Systems  │
-│                  │    │                  │  │       │  │                   │
-└──────────────────┘    └──────────────────┘  └───────┘  └───────────────────┘
-```
-
-## 🛠️ Components
-
-### SharePoint Indicator List
-Central database for all threat indicators with fields matching industry standards.
-
-### Teams Management Interface
-User-friendly interface for viewing, adding, and managing indicators.
-
-### Logic Apps Workflows
-- **Indicator Ingestion**: Add new indicators to SharePoint from feeds
-- **Platform Deployment**: Deploy indicators to appropriate platforms
-- **Synchronization**: Keep all platforms in sync with SharePoint
-- **Reputation Monitoring**: Update indicators when reputation changes
-- **Lifecycle Management**: Remove expired or false positive indicators
-
-### Deployment Targets
-
-**Microsoft 365 Security**
-- Microsoft Defender for Endpoint (MDE)
-- Entra ID Named Locations
-- Microsoft Defender for Cloud Apps (MDCA)
-- Exchange Online Protection
-- Microsoft Sentinel
-
-**Azure Security**
-- Azure Firewall
-- Azure Front Door WAF
-- Azure Policy
-- Defender for Cloud
-
-**On-Premises**
-- Network Security Devices
-- Proxy/Firewall Systems
-- EDR/Antivirus Solutions
-
-## 🔄 Indicator Management Workflows
-
-### Adding New Indicators
 ```powershell
-# Add indicator via PowerShell
-.\Add-CTIIndicator.ps1 -Type "IPAddress" -Value "192.168.1.100" -TLP "Amber" -PlatformTargets "MDE,EntraID,MDCA"
+# 1. Clone the repository
+git clone https://github.com/ClarityXDR/prod.git
+cd prod/cti
 
-# Or use the Teams interface to add indicators manually
+# 2. Fix GitHub URLs (one-time setup)
+.\Fix-GitHubURLs.ps1 -RepositoryPath .
+
+# 3. Deploy everything!
+.\Deploy-ClarityXDR-CTI.ps1 `
+    -TenantId "YOUR_TENANT_ID" `
+    -SubscriptionId "YOUR_SUBSCRIPTION_ID" `
+    -ResourceGroupName "CTI-RG" `
+    -SharePointTenantUrl "https://yourdomain-admin.sharepoint.com" `
+    -SharePointSiteUrl "https://yourdomain.sharepoint.com/sites/CTI" `
+    -GlobalAdminCredential (Get-Credential)
 ```
 
-### Automated Deployments
-Logic Apps automatically deploy indicators to appropriate security platforms:
-- IP addresses → Network security, MDCA, Entra ID
-- Domains → DNS filtering, Exchange, MDE
-- File hashes → MDE, Antivirus
-- URLs → Proxy filtering, Exchange, MDE
+That's it! Your CTI system will be fully deployed and operational.
 
-### Reputation Management
+## 📋 Pre-Flight Checklist (5 minutes)
+
+### Required Information
+- [ ] Azure Tenant ID
+- [ ] Azure Subscription ID  
+- [ ] SharePoint Admin URL
+- [ ] SharePoint Site URL (can be new)
+- [ ] Global Admin credentials
+
+### Required Permissions
+- [ ] Global Administrator in M365
+- [ ] Owner on Azure Subscription
+- [ ] SharePoint Administrator
+
+### Quick Prerequisites Install
 ```powershell
-# Check indicator reputation
-.\Get-IndicatorReputation.ps1 -Value "192.168.1.100"
+# Run as Administrator
+Set-ExecutionPolicy Bypass -Scope Process -Force
 
-# Update indicator reputation
-.\Update-IndicatorReputation.ps1 -Value "192.168.1.100" -NewStatus "Clean" -Reason "False positive"
-```
-
-### Indicator Lifecycle
-1. **Ingestion**: Added to SharePoint from feeds or manual entry
-2. **Validation**: Checked against reputation services
-3. **Deployment**: Pushed to appropriate security platforms
-4. **Monitoring**: Regular reputation checks and usage metrics
-5. **Retirement**: Automatic removal when expired or reputation changes
-
-## 📊 Reporting and Metrics
-
-The solution provides comprehensive reporting through:
-- Power BI dashboards
-- Teams interface reporting tab
-- Integration with security operations reporting
-
-Key metrics tracked:
-- Total indicators by type and platform
-- Deployment success rates
-- Reputation changes
-- False positive rates
-- Effectiveness in preventing attacks
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Microsoft 365 E5 subscription
-- SharePoint site with admin access
-- Azure subscription with Logic Apps
-- Teams with app integration capabilities
-
-### Initial Setup
-1. Create the SharePoint indicator list
-2. Deploy the Teams app
-3. Configure Logic Apps for integration
-4. Set up API connections to security platforms
-
-For detailed setup instructions, see the [Implementation Guide](./Documentation/Implementation-Guide.md).
-
----
-
-**Last Updated**: August 2023 | **Maintained by**: SOC Team
-- **False Positive Filtering**: Whitelist management for known good indicators
-- **Confidence Scoring**: Assigning confidence levels to indicators
-- **Source Reputation**: Tracking feed reliability and accuracy
-- **Duplicate Detection**: Preventing duplicate IOC entries
-
-## 🔧 Configuration
-
-### Feed Configuration File (`feeds-config.json`)
-```json
-{
-  "feeds": [
-    {
-      "name": "Emerging Threats",
-      "type": "HTTP",
-      "url": "https://rules.emergingthreats.net/",
-      "format": "SURICATA",
-      "schedule": "hourly",
-      "enabled": true
-    }
-  ]
+# Install all required modules (3-5 minutes)
+@('Az','PnP.PowerShell','ExchangeOnlineManagement','Microsoft.Graph') | ForEach-Object {
+    Install-Module -Name $_ -Force -AllowClobber
 }
 ```
 
-### IOC Processing Rules
-- **Retention Policy**: How long to keep indicators
-- **Distribution Lists**: Which systems receive which IOCs
-- **Priority Levels**: High, medium, low priority classification
-- **Action Types**: Block, alert, monitor actions for different IOCs
+## 🏃‍♂️ Deployment Process
 
-## 📈 Metrics and Reporting
+### What Happens During Deployment
 
-### Key Performance Indicators
-- **IOC Volume**: Number of indicators processed daily
-- **Feed Reliability**: Uptime and accuracy metrics for each feed
-- **Detection Rate**: How many IOCs result in actual detections
-- **False Positive Rate**: Percentage of IOCs that are false positives
+1. **App Registration** (2 min)
+   - Creates service principal
+   - Configures API permissions
+   - Generates secure credentials
 
-### Reports Available
-- **Daily IOC Summary**: New indicators added in the last 24 hours
-- **Weekly Threat Landscape**: Trending threats and IOC categories
-- **Monthly Attribution Report**: Threat actor activity summary
-- **Quarterly Feed Performance**: Analysis of feed effectiveness
+2. **Azure Resources** (10 min)
+   - Resource group creation
+   - Logic Apps deployment
+   - Automation account setup
+   - Sentinel workspace configuration
 
-## 🔐 Security Considerations
+3. **SharePoint Setup** (5 min)
+   - Site configuration
+   - List creation
+   - Security settings
+   - Web part deployment
 
-### Access Control
-- **Role-based Access**: Different permission levels for CTI analysts
-- **API Security**: Secure storage and rotation of API keys
-- **Data Classification**: Proper handling of sensitive threat intelligence
-- **Audit Logging**: Complete audit trail of all CTI operations
+4. **Integration** (5 min)
+   - PowerShell module installation
+   - Security platform connections
+   - Scheduled task configuration
 
-### Data Protection
-- **Encryption**: All CTI data encrypted at rest and in transit
-- **Backup**: Regular backups of IOC databases and configurations
-- **Privacy**: Ensuring compliance with data protection regulations
-- **Sharing Agreements**: Respecting TLP and sharing restrictions
+5. **Validation** (3 min)
+   - Component testing
+   - Smoke tests
+   - Health verification
 
-## 🤝 Contributing
+## ✅ Post-Deployment Steps
 
-### Adding New IOCs
-1. Use the standardized IOC format
-2. Include proper attribution and confidence scores
-3. Validate against existing whitelists
-4. Document the source and context
+### Immediate Actions (Required)
 
-### Feed Integration
-1. Create feed parser for new format
-2. Implement quality validation rules
-3. Add configuration options
-4. Test with sample data before production
+1. **Grant Admin Consent** (2 minutes)
+   ```
+   Azure Portal > Azure Active Directory > App registrations
+   > ClarityXDR-CTI-Automation > API permissions > Grant admin consent
+   ```
 
-## 📚 References
+2. **Test the System** (5 minutes)
+   ```powershell
+   # Run validation
+   .\Test-CTIDeployment.ps1 -ResourceGroupName "CTI-RG" -SharePointSiteUrl "YOUR_SITE_URL" -RunSmokeTests
 
-- [STIX/TAXII Standards](https://oasis-open.github.io/cti-documentation/)
-- [MISP Threat Sharing Platform](https://www.misp-project.org/)
-- [Microsoft Defender for Endpoint IOC API](https://docs.microsoft.com/en-us/microsoft-365/security/defender-endpoint/ti-indicator)
-- [Cyber Threat Intelligence Best Practices](https://www.sans.org/white-papers/cyber-threat-intelligence/)
+   # Add first indicator
+   Import-Module ClarityXDR-CTI
+   Set-CTIIndicator -Type "IPAddress" -Value "192.168.100.100" -Confidence 90 -Source "InitialTest"
+   ```
+
+3. **Verify Automation** (2 minutes)
+   - Check Logic Apps are running in Azure Portal
+   - Confirm SharePoint list shows the test indicator
+   - Verify deployment status updates
+
+## 🔧 Configuration Options
+
+### Minimal Deployment (Fastest)
+```powershell
+# Uses all defaults, creates everything new
+.\Deploy-ClarityXDR-CTI.ps1 -TenantId "xxx" -SubscriptionId "yyy" -ResourceGroupName "CTI-RG" -SharePointTenantUrl "https://x-admin.sharepoint.com" -SharePointSiteUrl "https://x.sharepoint.com/sites/CTI" -GlobalAdminCredential (Get-Credential)
+```
+
+### Using Existing Resources
+```powershell
+# Reuse existing app registration and Sentinel workspace
+.\Deploy-ClarityXDR-CTI.ps1 `
+    -TenantId "xxx" `
+    -SubscriptionId "yyy" `
+    -ResourceGroupName "CTI-RG" `
+    -SharePointTenantUrl "https://x-admin.sharepoint.com" `
+    -SharePointSiteUrl "https://x.sharepoint.com/sites/CTI" `
+    -GlobalAdminCredential (Get-Credential) `
+    -UseExistingAppRegistration `
+    -ExistingAppId "YOUR_APP_ID" `
+    -ExistingAppSecret "YOUR_SECRET"
+```
+
+### Custom Configuration File
+```powershell
+# Use custom settings from deployment-config.json
+Copy-Item deployment-config.json my-config.json
+# Edit my-config.json with your settings
+
+.\Deploy-ClarityXDR-CTI.ps1 `
+    -ConfigFile "my-config.json" `
+    -GlobalAdminCredential (Get-Credential)
+```
+
+## 📊 What You Get
+
+### Security Platforms Integration
+- ✅ **Microsoft Defender for Endpoint** - File hashes, IPs, URLs, domains
+- ✅ **Azure AD (Entra ID)** - Named Locations with sign-in blocking
+- ✅ **Microsoft Defender for Cloud Apps** - Risky IP categorization
+- ✅ **Exchange Online Protection** - Connection filtering and block lists
+- ✅ **Microsoft Sentinel** - Central orchestration and logging
+
+### Automation Features
+- 📅 Daily synchronization of indicators
+- 🔄 Automatic deployment to all platforms
+- 🧹 Expired indicator cleanup
+- 📈 Health monitoring and reporting
+- 🚨 Failure notifications
+
+### Management Interface
+- 📝 SharePoint lists for indicator management
+- 📊 Power BI ready data structure
+- 🔍 KQL query templates
+- 🗺️ MITRE ATT&CK mapping
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| "Insufficient privileges" | Ensure you're using Global Admin account |
+| "Module not found" | Run PowerShell as Administrator and reinstall modules |
+| "Resource provider not registered" | Run: `Register-AzResourceProvider -ProviderNamespace Microsoft.Logic` |
+| "SharePoint error" | Verify site URL and that site exists |
+
+### Quick Diagnostics
+```powershell
+# Check deployment status
+.\Test-CTIDeployment.ps1 -ResourceGroupName "CTI-RG" -SharePointSiteUrl "YOUR_SITE" -OutputReport
+
+# View deployment logs
+Get-Content "CTI-Deployment-*.log" -Tail 50
+
+# Test specific component
+Test-NetConnection graph.microsoft.com -Port 443
+```
+
+### Emergency Rollback
+```powershell
+# Remove everything if needed
+Remove-AzResourceGroup -Name "CTI-RG" -Force
+# Remove SharePoint lists manually if needed
+```
+
+## 📈 Daily Operations
+
+### Automatic Daily Tasks
+The system automatically:
+- Syncs new indicators to all platforms
+- Validates existing deployments
+- Removes expired indicators
+- Sends summary reports
+
+### Manual Operations
+```powershell
+# Force sync all pending indicators
+.\Run-CTIDailySync.ps1 -ForceSync
+
+# Add indicators from CSV
+Import-Csv "indicators.csv" | ForEach-Object {
+    Set-CTIIndicator -Type $_.Type -Value $_.Value -Confidence $_.Confidence -Source "CSV Import"
+}
+
+# Generate deployment report
+.\Test-CTIDeployment.ps1 -ResourceGroupName "CTI-RG" -SharePointSiteUrl "YOUR_SITE" -OutputReport
+```
+
+## 🎉 Success Indicators
+
+You know your deployment is successful when:
+- ✅ All validation tests pass (80%+ success rate)
+- ✅ Test indicator appears in SharePoint within 1 minute
+- ✅ Logic Apps show successful runs
+- ✅ You can query indicators via PowerShell
+- ✅ Deployment completes in under 30 minutes
+
+## 📞 Need Help?
+
+1. **Check the logs**: `CTI-Deployment-[timestamp].log`
+2. **Run validation**: `.\Test-CTIDeployment.ps1`
+3. **Review quick start guide**: Generated after deployment
+4. **GitHub Issues**: https://github.com/ClarityXDR/prod/issues
 
 ---
 
-**Last Updated**: July 2025 | **Maintained by**: SOC Team
+**Ready to deploy?** You're just one command away from a fully operational CTI system! 🚀
 
-## 🛠️ Scripts and Tools
-
-### Core PowerShell Scripts
 ```powershell
-# Create an indicator in the central system that will sync to all platforms
-.\Add-CTIIndicator.ps1 -Type "IPAddress" -Value "192.168.1.100" -Title "Malicious C2 Server" -TLP "Amber" -DeploymentTargets "MDE,EntraID,MDCA"
-
-# Remove an indicator from all platforms
-.\Remove-CTIIndicator.ps1 -IndicatorId "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
-
-# Check indicator deployment status across all platforms
-.\Get-CTIDeploymentStatus.ps1 -IndicatorValue "192.168.1.100"
-
-# Validate indicator against reputation services
-.\Test-IndicatorReputation.ps1 -Value "192.168.1.100" -Type "IPAddress"
+# Remember: Blue to Green in under 30 minutes!
+.\Deploy-ClarityXDR-CTI.ps1 -TenantId "YOUR_TENANT" -SubscriptionId "YOUR_SUB" -ResourceGroupName "CTI-RG" -SharePointTenantUrl "https://yourdomain-admin.sharepoint.com" -SharePointSiteUrl "https://yourdomain.sharepoint.com/sites/CTI" -GlobalAdminCredential (Get-Credential)
 ```
-
-### Logic App Sync Management
-```powershell
-# Force sync from SharePoint to security platforms
-.\Sync-CTIToSecurityPlatforms.ps1 -ForceSync
-
-# Import indicators from CSV file into SharePoint
-.\Import-CTIIndicators.ps1 -CsvPath "C:\Temp\new-indicators.csv"
-
-# Check sync status of all Logic Apps
-.\Get-CTISyncStatus.ps1
-```
-
-## 📊 IOC Categories and Platform Mapping
-
-### Indicator Types and Destinations
-| Indicator Type | Microsoft 365 | Azure | On-Premises | Third-Party |
-|----------------|---------------|-------|-------------|-------------|
-| IP Address     | MDE, MDCA, Entra ID | Azure Firewall, Front Door WAF | Firewall, IPS | SIEM, TIP |
-| Domain         | MDE, Exchange EOP | Azure DNS Firewall | DNS Filtering | SIEM, TIP |
-| URL            | MDE, Exchange EOP/TABL | App Proxy | Proxy | SIEM, TIP |
-| File Hash      | MDE | Defender for Cloud | EDR | SIEM, TIP |
-| Certificate    | MDE | App Gateway | Network Security | SIEM, TIP |
-| Email          | Exchange EOP/TABL | - | Mail Gateway | SIEM, TIP |
-
-### Automatic Placement Logic
-- **IP Addresses with "email" in description** → Exchange Connection Filter
-- **IP Addresses (general)** → MDCA + Entra ID
-- **URLs with "phish" in description** → Exchange Tenant Allow Block List
-- **URLs (general)** → MDE + Exchange
-- **Domains** → MDE + Exchange dual deployment
-- **File Hashes** → MDE primary deployment
-- **Certificates** → MDE primary deployment
-
-## 🔄 Lifecycle Automation
-
-### Indicator Creation
-1. Indicator added to SharePoint (via Teams UI, PowerShell, or Logic App)
-2. SharePoint trigger activates deployment Logic App
-3. Logic App determines appropriate security platforms
-4. Indicator is deployed to all targeted platforms
-5. Deployment status is updated in SharePoint
-
-### Indicator Validation
-1. Scheduled Logic App checks indicator reputation
-2. Reputation sources include VirusTotal, Microsoft Security Graph, AlienVault
-3. Confidence score is updated based on validation results
-4. Indicators with low confidence are flagged for review
-
-### Indicator Removal
-1. Indicator marked as expired or false positive in SharePoint
-2. Removal Logic App triggered
-3. Indicator removed from all security platforms
-4. Record kept in SharePoint with status "Expired" or "FalsePositive"
-5. Removal status logged in action history
