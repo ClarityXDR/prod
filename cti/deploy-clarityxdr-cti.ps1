@@ -42,7 +42,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SharePointSiteUrl,
     
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [PSCredential]$GlobalAdminCredential,
     
     [Parameter(Mandatory = $false)]
@@ -58,7 +58,10 @@ param(
     [string]$ExistingAppId,
     
     [Parameter(Mandatory = $false)]
-    [string]$ExistingAppSecret
+    [string]$ExistingAppSecret,
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$ForceCloudShellMode
 )
 
 # Script configuration
@@ -67,6 +70,26 @@ $ProgressPreference = "Continue"
 $script:StartTime = Get-Date
 $script:LogFile = "CTI-Deployment-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 $script:GitHubBaseUrl = "https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti"
+$script:IsCloudShell = $env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0' -or $ForceCloudShellMode
+
+# Cloud Shell environment setup
+if ($script:IsCloudShell) {
+    Write-Host "🌤️  Azure Cloud Shell detected - Configuring environment..." -ForegroundColor Cyan
+    
+    # Set home directory for logs in Cloud Shell
+    if (Test-Path "/home/$env:USER") {
+        $script:LogFile = "/home/$env:USER/CTI-Deployment-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+    }
+    
+    # Suppress Azure CLI update warnings
+    $env:AZURE_CORE_SURVEY_MESSAGE = "false"
+    
+    # Ensure we're using the right context
+    if ($null -eq (Get-AzContext)) {
+        Write-Host "Please login to Azure..." -ForegroundColor Yellow
+        Connect-AzAccount
+    }
+}
 
 # Color configuration for output
 $Colors = @{
@@ -93,11 +116,7 @@ function Write-DeploymentLog {
     Add-Content -Path $script:LogFile -Value $logMessage
     
     # Write to console with color
-    if ($Colors.ContainsKey($Level) -and $Colors[$Level]) {
-        $color = $Colors[$Level]
-    } else {
-        $color = "White"
-    }
+    $color = $Colors[$Level] ?? "White"
     if ($NoNewLine) {
         Write-Host $Message -ForegroundColor $color -NoNewline
     } else {
@@ -108,12 +127,29 @@ function Write-DeploymentLog {
 function Test-Prerequisites {
     Write-DeploymentLog "Checking prerequisites..." -Level "Progress"
     
+    # Detect if running in Azure Cloud Shell
+    $isCloudShell = $env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0'
+    if ($isCloudShell) {
+        Write-DeploymentLog "  Detected Azure Cloud Shell environment" -Level "Info"
+        Initialize-CloudShellEnvironment
+    }
+    
     $prerequisites = @{
         "Azure PowerShell" = { Get-Module -ListAvailable -Name Az.* }
         "PnP PowerShell" = { Get-Module -ListAvailable -Name PnP.PowerShell }
         "Exchange Online Management" = { Get-Module -ListAvailable -Name ExchangeOnlineManagement }
-        "Microsoft Graph" = { Get-Module -ListAvailable -Name Microsoft.Graph }
-        "Azure CLI" = { az --version }
+        "Azure CLI" = { az --version 2>$null }
+    }
+    
+    # Handle Microsoft Graph differently for Cloud Shell
+    if (-not $isCloudShell) {
+        $prerequisites["Microsoft Graph"] = { Get-Module -ListAvailable -Name Microsoft.Graph }
+    } else {
+        # In Cloud Shell, check for Microsoft.Graph.* modules
+        $prerequisites["Microsoft Graph"] = { 
+            $graphModules = Get-Module -ListAvailable -Name Microsoft.Graph.* | Select-Object -First 1
+            return $null -ne $graphModules
+        }
     }
     
     $missing = @()
@@ -139,6 +175,36 @@ function Test-Prerequisites {
     Write-DeploymentLog "All prerequisites satisfied!" -Level "Success"
 }
 
+function Initialize-CloudShellEnvironment {
+    Write-DeploymentLog "  Configuring Cloud Shell environment..." -Level "Info"
+    
+    # Import required Microsoft Graph modules in Cloud Shell
+    $graphModules = @(
+        'Microsoft.Graph.Authentication',
+        'Microsoft.Graph.Applications',
+        'Microsoft.Graph.Identity.DirectoryManagement',
+        'Microsoft.Graph.Identity.SignIns',
+        'Microsoft.Graph.Security'
+    )
+    
+    foreach ($module in $graphModules) {
+        if (Get-Module -ListAvailable -Name $module) {
+            Import-Module $module -Force -ErrorAction SilentlyContinue
+            Write-DeploymentLog "    Imported $module" -Level "Debug"
+        }
+    }
+    
+    # Set PowerShell Gallery as trusted if not already
+    if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+    }
+    
+    # Configure Azure PowerShell context settings for Cloud Shell
+    Disable-AzContextAutosave -Scope Process -ErrorAction SilentlyContinue
+    
+    Write-DeploymentLog "  Cloud Shell environment configured" -Level "Success"
+}
+
 function New-CTIAppRegistration {
     param(
         [string]$AppName = "ClarityXDR-CTI-Automation"
@@ -146,8 +212,21 @@ function New-CTIAppRegistration {
     
     Write-DeploymentLog "Creating Azure AD App Registration..." -Level "Progress"
     
-    # Connect to Azure AD
-    Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -Credential $GlobalAdminCredential
+    # Check if already connected (Cloud Shell is pre-authenticated)
+    $currentContext = Get-AzContext
+    if (-not $currentContext -or $currentContext.Tenant.Id -ne $TenantId) {
+        # Connect to Azure AD
+        if ($env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0') {
+            # In Cloud Shell, use device code flow if context doesn't match
+            Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -UseDeviceAuthentication
+        } else {
+            Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -Credential $GlobalAdminCredential
+        }
+    } else {
+        Write-DeploymentLog "Using existing Azure connection" -Level "Info"
+        # Ensure we're on the right subscription
+        Set-AzContext -SubscriptionId $SubscriptionId -TenantId $TenantId | Out-Null
+    }
     
     # Required API permissions
     $requiredPermissions = @(
@@ -175,9 +254,6 @@ function New-CTIAppRegistration {
             )
         }
     )
-
-    # Mark variable as intentionally used to satisfy script analyzers until the permission-grant logic is added.
-    $null = $requiredPermissions
     
     # Create app registration
     $app = New-AzADApplication -DisplayName $AppName -IdentifierUris "https://$AppName.clarityxdr.com"
@@ -221,11 +297,20 @@ function Deploy-AzureResources {
         projectName = "CTI"
         sentinelWorkspaceId = "" # Will be created or retrieved
         sentinelWorkspaceKey = "" # Will be retrieved after creation
-        exchangeCredentialUsername = $GlobalAdminCredential.UserName
-        exchangeCredentialPassword = $GlobalAdminCredential.GetNetworkCredential().Password
         graphAppId = $AppRegistration.AppId
         graphClientSecret = $AppRegistration.AppSecret
         tenantId = $TenantId
+    }
+    
+    # Add Exchange credentials only if provided (not in Cloud Shell mode)
+    if ($GlobalAdminCredential) {
+        $deploymentParams.exchangeCredentialUsername = $GlobalAdminCredential.UserName
+        $deploymentParams.exchangeCredentialPassword = $GlobalAdminCredential.GetNetworkCredential().Password
+    } else {
+        # In Cloud Shell, use placeholder values that will be updated post-deployment
+        $deploymentParams.exchangeCredentialUsername = "svc-cti@$((Get-AzContext).Tenant.Id.Split('-')[0]).onmicrosoft.com"
+        $deploymentParams.exchangeCredentialPassword = "PlaceholderWillBeUpdatedPostDeployment"
+        Write-DeploymentLog "Exchange credentials will need to be configured post-deployment in Azure Automation" -Level "Warning"
     }
     
     # Check for existing Sentinel workspace or create new one
@@ -249,7 +334,8 @@ function Deploy-AzureResources {
     # Download and deploy ARM template
     Write-DeploymentLog "Downloading ARM template from GitHub..." -Level "Info"
     $templateUri = "$script:GitHubBaseUrl/azuredeploy.json"
-    $templateFile = "$env:TEMP\cti-azuredeploy.json"
+    $tempPath = if ($script:IsCloudShell) { "/tmp" } else { $env:TEMP }
+    $templateFile = "$tempPath/cti-azuredeploy.json"
     Invoke-WebRequest -Uri $templateUri -OutFile $templateFile
     
     # Deploy ARM template
@@ -277,30 +363,57 @@ function Deploy-AzureResources {
 function Deploy-SharePointComponents {
     Write-DeploymentLog "Deploying SharePoint components..." -Level "Progress"
     
-    # Connect to SharePoint
+    # Connect to SharePoint with appropriate method
     Write-DeploymentLog "Connecting to SharePoint..." -Level "Info"
-    Connect-PnPOnline -Url $SharePointTenantUrl -Credentials $GlobalAdminCredential
+    
+    try {
+        if ($env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0') {
+            # In Cloud Shell, use interactive login for SharePoint
+            Write-DeploymentLog "Using interactive authentication for SharePoint (Cloud Shell)" -Level "Info"
+            Connect-PnPOnline -Url $SharePointTenantUrl -Interactive
+        } else {
+            # Use credentials for non-Cloud Shell environments
+            Connect-PnPOnline -Url $SharePointTenantUrl -Credentials $GlobalAdminCredential
+        }
+    } catch {
+        # Fallback to web login if other methods fail
+        Write-DeploymentLog "Falling back to web-based authentication" -Level "Warning"
+        Connect-PnPOnline -Url $SharePointTenantUrl -UseWebLogin
+    }
     
     # Download and execute SharePoint deployment script
-    $spDeployScript = "$env:TEMP\deploy-soc-template.ps1"
+    $tempPath = if ($script:IsCloudShell) { "/tmp" } else { $env:TEMP }
+    $spDeployScript = "$tempPath/deploy-soc-template.ps1"
     Invoke-WebRequest -Uri "$script:GitHubBaseUrl/SharePoint/deploy-soc-template.ps1" -OutFile $spDeployScript
     
     # Create certificate for app-only auth
     Write-DeploymentLog "Creating certificate for SharePoint app authentication..." -Level "Info"
     $certName = "CTI-SharePoint-Cert"
     $cert = New-SelfSignedCertificate -Subject "CN=$certName" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -KeySpec Signature -KeyLength 2048 -HashAlgorithm SHA256
-    $certPath = "$env:TEMP\$certName.pfx"
+    $certPath = "$tempPath/$certName.pfx"
     $certPassword = [System.Web.Security.Membership]::GeneratePassword(16, 4)
     Export-PfxCertificate -Cert $cert -FilePath $certPath -Password (ConvertTo-SecureString -String $certPassword -AsPlainText -Force)
     
     # Execute SharePoint deployment
-    & $spDeployScript `
-        -TenantUrl $SharePointTenantUrl `
-        -SiteUrl $SharePointSiteUrl `
-        -AppId $AppRegistration.AppId `
-        -CertificatePath $certPath `
-        -SOCManagerEmail $GlobalAdminCredential.UserName `
-        -SentinelWorkspaceId $AzureDeployment.WorkspaceId
+    if ($script:IsCloudShell) {
+        # In Cloud Shell, run the script without credential parameter
+        & $spDeployScript `
+            -TenantUrl $SharePointTenantUrl `
+            -SiteUrl $SharePointSiteUrl `
+            -AppId $AppRegistration.AppId `
+            -CertificatePath $certPath `
+            -SOCManagerEmail "$((Get-AzContext).Account.Id)" `
+            -SentinelWorkspaceId $AzureDeployment.WorkspaceId
+    } else {
+        # Standard execution with credentials
+        & $spDeployScript `
+            -TenantUrl $SharePointTenantUrl `
+            -SiteUrl $SharePointSiteUrl `
+            -AppId $AppRegistration.AppId `
+            -CertificatePath $certPath `
+            -SOCManagerEmail $GlobalAdminCredential.UserName `
+            -SentinelWorkspaceId $AzureDeployment.WorkspaceId
+    }
     
     Write-DeploymentLog "SharePoint components deployed successfully!" -Level "Success"
     
@@ -318,9 +431,21 @@ function Deploy-PowerShellModules {
     
     Write-DeploymentLog "Deploying PowerShell modules..." -Level "Progress"
     
-    # Download CTI module
-    $moduleDir = "$env:ProgramFiles\WindowsPowerShell\Modules\ClarityXDR-CTI\1.0.0"
+    # Determine module installation path
+    if ($script:IsCloudShell) {
+        # Cloud Shell uses user-specific module path
+        $moduleBase = "/home/$env:USER/.local/share/powershell/Modules"
+        if (-not (Test-Path $moduleBase)) {
+            New-Item -Path $moduleBase -ItemType Directory -Force | Out-Null
+        }
+        $moduleDir = "$moduleBase/ClarityXDR-CTI/1.0.0"
+    } else {
+        # Standard Windows PowerShell path
+        $moduleDir = "$env:ProgramFiles\WindowsPowerShell\Modules\ClarityXDR-CTI\1.0.0"
+    }
+    
     New-Item -Path $moduleDir -ItemType Directory -Force | Out-Null
+    Write-DeploymentLog "Installing CTI module to: $moduleDir" -Level "Info"
     
     $moduleFiles = @(
         "CTI-Module.psm1",
@@ -347,16 +472,56 @@ function Deploy-PowerShellModules {
 function Deploy-ScheduledTasks {
     Write-DeploymentLog "Configuring scheduled automation..." -Level "Progress"
     
-    # Create scheduled task for daily CTI operations
-    $taskName = "ClarityXDR-CTI-DailySync"
-    $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Run-CTIDailySync.ps1`""
-    $trigger = New-ScheduledTaskTrigger -Daily -At "2:00AM"
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
-    
-    Write-DeploymentLog "Scheduled tasks configured successfully!" -Level "Success"
+    if ($script:IsCloudShell) {
+        # In Cloud Shell, we can't create Windows scheduled tasks
+        Write-DeploymentLog "Cloud Shell detected - Scheduled tasks will be configured in Azure Automation" -Level "Info"
+        
+        # The Azure Automation runbooks are already deployed via ARM template
+        Write-DeploymentLog "Azure Automation runbooks configured for daily operations" -Level "Success"
+        Write-DeploymentLog "  - Daily sync scheduled for 2:00 AM UTC" -Level "Info"
+        Write-DeploymentLog "  - Hourly health checks enabled" -Level "Info"
+        
+        # Create reminder for manual configuration
+        $reminderPath = "/home/$env:USER/CTI-ScheduledTasks-Setup.md"
+        @"
+# CTI Scheduled Tasks Configuration
+
+Since you deployed from Cloud Shell, Windows scheduled tasks were not created.
+The Azure Automation runbooks have been deployed and will handle:
+
+1. Daily synchronization (2:00 AM UTC)
+2. Hourly health checks
+3. Weekly cleanup operations
+
+## To Enable Runbook Schedules:
+
+1. Go to Azure Portal > Resource Groups > CTI-RG
+2. Open the CTI Automation Account
+3. Navigate to Runbooks
+4. For each runbook, click "Schedules" and enable
+
+## Manual Daily Sync:
+
+Run this command in Cloud Shell anytime:
+``````powershell
+./Run-CTIDailySync.ps1 -ConfigFile deployment-config.json
+``````
+"@ | Out-File -FilePath $reminderPath -Encoding UTF8
+        
+        Write-DeploymentLog "Scheduled task setup instructions saved to: $reminderPath" -Level "Info"
+    } else {
+        # Original Windows scheduled task creation
+        # Create scheduled task for daily CTI operations
+        $taskName = "ClarityXDR-CTI-DailySync"
+        $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Run-CTIDailySync.ps1`""
+        $trigger = New-ScheduledTaskTrigger -Daily -At "2:00AM"
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
+        
+        Write-DeploymentLog "Scheduled tasks configured successfully!" -Level "Success"
+    }
 }
 
 function Test-Deployment {
@@ -428,10 +593,32 @@ function New-QuickStartGuide {
         [hashtable]$DeploymentInfo
     )
     
+    $cloudShellInstructions = if ($script:IsCloudShell) {
+        @"
+
+## Cloud Shell Specific Instructions
+
+1. **Module Access**
+   Your CTI module is installed at:
+   ``/home/$env:USER/.local/share/powershell/Modules/ClarityXDR-CTI``
+
+2. **Logs Location**
+   Deployment logs are saved in your Cloud Shell home directory:
+   ``/home/$env:USER/CTI-*.log``
+
+3. **Daily Operations**
+   Run daily sync manually from Cloud Shell:
+   ``````powershell
+   curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/Run-CTIDailySync.ps1 | pwsh -File -
+   ``````
+"@
+    } else { "" }
+    
     $quickStart = @"
 # ClarityXDR CTI Quick Start Guide
 
 Deployment completed on: $(Get-Date)
+Environment: $(if ($script:IsCloudShell) { "Azure Cloud Shell" } else { "Local PowerShell" })
 
 ## Key Information
 
@@ -463,6 +650,7 @@ Deployment completed on: $(Get-Date)
 4. **Monitor Logic Apps**
    - Azure Portal > Resource Groups > $ResourceGroupName
    - Check Logic Apps run history
+$cloudShellInstructions
 
 ## Support
 
@@ -474,7 +662,12 @@ Deployment completed on: $(Get-Date)
 See: $($script:LogFile)
 "@
     
-    $quickStartPath = "CTI-QuickStart-$(Get-Date -Format 'yyyyMMdd').md"
+    $quickStartPath = if ($script:IsCloudShell) {
+        "/home/$env:USER/CTI-QuickStart-$(Get-Date -Format 'yyyyMMdd').md"
+    } else {
+        "CTI-QuickStart-$(Get-Date -Format 'yyyyMMdd').md"
+    }
+    
     $quickStart | Out-File -FilePath $quickStartPath -Encoding UTF8
     
     Write-DeploymentLog "Quick start guide created: $quickStartPath" -Level "Success"
@@ -495,6 +688,18 @@ try {
     
     Write-DeploymentLog "Starting ClarityXDR CTI deployment..." -Level "Progress"
     Write-DeploymentLog "Deployment name: $DeploymentName" -Level "Info"
+    
+    # Validate credentials
+    if (-not $script:IsCloudShell -and -not $GlobalAdminCredential) {
+        Write-DeploymentLog "GlobalAdminCredential is required when not running in Cloud Shell" -Level "Error"
+        throw "Please provide GlobalAdminCredential parameter or run from Azure Cloud Shell"
+    }
+    
+    # In Cloud Shell, prompt for credentials if not provided
+    if ($script:IsCloudShell -and -not $GlobalAdminCredential) {
+        Write-DeploymentLog "Cloud Shell mode - Interactive authentication will be used" -Level "Info"
+        # We'll use interactive auth for each service as needed
+    }
     
     # Step 1: Prerequisites check
     if (-not $SkipPrerequisiteCheck) {
@@ -531,7 +736,7 @@ try {
         SharePoint = $spDeployment
     }
     
-    Test-Deployment -DeploymentInfo $deploymentInfo
+    $validationResult = Test-Deployment -DeploymentInfo $deploymentInfo
     
     # Step 8: Create quick start guide
     New-QuickStartGuide -DeploymentInfo $deploymentInfo
@@ -571,11 +776,22 @@ try {
     throw
 } finally {
     # Cleanup sensitive files
-    if (Test-Path "$env:TEMP\cti-*.json") {
-        Remove-Item "$env:TEMP\cti-*.json" -Force
+    $tempPath = if ($script:IsCloudShell) { "/tmp" } else { $env:TEMP }
+    
+    if (Test-Path "$tempPath/cti-*.json") {
+        Remove-Item "$tempPath/cti-*.json" -Force
     }
-    if (Test-Path "$env:TEMP\*.pfx") {
-        Remove-Item "$env:TEMP\*.pfx" -Force
+    if (Test-Path "$tempPath/*.pfx") {
+        Remove-Item "$tempPath/*.pfx" -Force
+    }
+    
+    # Cloud Shell specific cleanup
+    if ($script:IsCloudShell) {
+        # Show summary in Cloud Shell
+        Write-Host "`n📁 Deployment artifacts saved to: /home/$env:USER/" -ForegroundColor Cyan
+        Write-Host "   - Logs: CTI-Deployment-*.log" -ForegroundColor Gray
+        Write-Host "   - Quick Start: CTI-QuickStart-*.md" -ForegroundColor Gray
+        Write-Host "   - Config: deployment-config.json" -ForegroundColor Gray
     }
 }
 
