@@ -42,14 +42,14 @@ ClarityXDR CTI is a comprehensive Central Threat Intelligence management platfor
 
 ### Step 1: App Registration Setup (Foundation)
 ```bash
-# One-liner to create the foundational app registration with all required permissions
-curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/clarityxdr-app-registration.ps1 | pwsh -Command - -ResourceGroup "ClarityXDR-RG" -Location "westus"
+# Download and run the app registration script
+curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/clarityxdr-app-registration.ps1 -o clarityxdr-app-registration.ps1 && pwsh ./clarityxdr-app-registration.ps1 -ResourceGroup "ClarityXDR-RG" -Location "westus"
 ```
 
 ### Step 2: CTI Solution Deployment 
 ```bash
-# One-liner to deploy the complete CTI solution using the app registration
-curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/deploy-clarityxdr-cti.ps1 | pwsh -Command - -TenantId "YOUR_TENANT_ID" -SubscriptionId "YOUR_SUBSCRIPTION_ID" -ResourceGroupName "ClarityXDR-RG" -SharePointTenantUrl "https://yourdomain-admin.sharepoint.com" -SharePointSiteUrl "https://yourdomain.sharepoint.com/sites/CTI"
+# Download and run the CTI deployment script
+curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/deploy-clarityxdr-cti.ps1 -o deploy-clarityxdr-cti.ps1 && pwsh ./deploy-clarityxdr-cti.ps1 -TenantId "YOUR_TENANT_ID" -SubscriptionId "YOUR_SUBSCRIPTION_ID" -ResourceGroupName "ClarityXDR-RG" -SharePointTenantUrl "https://yourdomain-admin.sharepoint.com" -SharePointSiteUrl "https://yourdomain.sharepoint.com/sites/CTI"
 ```
 
 > **Pro Tip**: Replace `YOUR_TENANT_ID`, `YOUR_SUBSCRIPTION_ID`, and domain URLs with your actual values
