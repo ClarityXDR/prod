@@ -40,19 +40,77 @@ ClarityXDR CTI is a comprehensive Central Threat Intelligence management platfor
 
 ## 🚀 Quick Start - Azure Cloud Shell Deployment
 
-### Step 1: App Registration Setup (Foundation)
+### ⚡ SharePoint SOC Template - One-Liner Deployment
+
+Deploy just the SharePoint SOC template with all security lists, dashboards, and web parts:
+
+```bash
+# Deploy SharePoint SOC Template Only (Perfect for existing environments)
+curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/SharePoint/deploy-soc-template.ps1 | pwsh -Command { $input | Invoke-Expression; Deploy-SOCTemplate -TenantUrl "https://YOURDOMAIN-admin.sharepoint.com" -SiteUrl "https://YOURDOMAIN.sharepoint.com/sites/SOC" -AppId "YOUR-APP-ID" -CertificatePath "~/cert.pfx" }
+```
+
+> **Pro Tip**: Replace `YOURDOMAIN` with your actual tenant name, and have your App ID and certificate ready!
+
+### 🏗️ Full CTI Solution Deployment
+
+For complete CTI solution deployment including Azure resources:
+
+#### Step 1: App Registration Setup (Foundation)
 ```bash
 # Download and run the app registration script
 curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/clarityxdr-app-registration.ps1 -o clarityxdr-app-registration.ps1 && pwsh ./clarityxdr-app-registration.ps1 -ResourceGroup "ClarityXDR-RG" -Location "westus"
 ```
 
-### Step 2: CTI Solution Deployment 
+#### Step 2: CTI Solution Deployment 
 ```bash
 # Download and run the CTI deployment script
 curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/deploy-clarityxdr-cti.ps1 -o deploy-clarityxdr-cti.ps1 && pwsh ./deploy-clarityxdr-cti.ps1 -TenantId "YOUR_TENANT_ID" -SubscriptionId "YOUR_SUBSCRIPTION_ID" -ResourceGroupName "ClarityXDR-RG" -SharePointTenantUrl "https://yourdomain-admin.sharepoint.com" -SharePointSiteUrl "https://yourdomain.sharepoint.com/sites/CTI"
 ```
 
-> **Pro Tip**: Replace `YOUR_TENANT_ID`, `YOUR_SUBSCRIPTION_ID`, and domain URLs with your actual values
+## 🎯 SharePoint-Only Deployment Guide
+
+If you already have Azure resources and just need the SharePoint SOC template:
+
+### Prerequisites for SharePoint Template
+- ✅ SharePoint Online Plan 2 license
+- ✅ Global Administrator or SharePoint Administrator role
+- ✅ An App Registration with SharePoint permissions
+- ✅ A certificate for app-only authentication
+
+### Quick SharePoint Deployment Steps
+
+1. **Create a self-signed certificate** (if you don't have one):
+```powershell
+# In Azure Cloud Shell
+$cert = New-SelfSignedCertificate -Subject "CN=CTI-SharePoint" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -KeySpec Signature -KeyLength 2048 -HashAlgorithm SHA256
+Export-PfxCertificate -Cert $cert -FilePath ~/cti-cert.pfx -Password (ConvertTo-SecureString -String "TempPassword123!" -AsPlainText -Force)
+```
+
+2. **Run the SharePoint deployment**:
+```bash
+# Direct execution with parameters
+curl -sL https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti/SharePoint/deploy-soc-template.ps1 -o deploy-soc.ps1 && pwsh ./deploy-soc.ps1 -TenantUrl "https://contoso-admin.sharepoint.com" -SiteUrl "https://contoso.sharepoint.com/sites/SOC" -AppId "12345678-1234-1234-1234-123456789012" -CertificatePath "~/cti-cert.pfx"
+```
+
+### What Gets Deployed
+
+The SharePoint SOC template includes:
+
+#### 📋 Security Lists
+- **ThreatIndicatorsList** - Central threat intelligence repository
+- **Security Incidents** - Incident tracking and management
+- **KQL Queries** - Query library for threat hunting
+- **MITRE Coverage** - ATT&CK framework mapping
+
+#### 🎨 Custom Web Parts
+- **KQL Dashboard** - Real-time security metrics from Defender XDR & Sentinel
+- **MITRE Navigator** - Interactive ATT&CK coverage visualization
+
+#### 🔧 Site Configuration
+- External sharing disabled
+- Security-focused theme and branding
+- Audit logging enabled
+- DLP policies configured
 
 ## 📋 Prerequisites
 
