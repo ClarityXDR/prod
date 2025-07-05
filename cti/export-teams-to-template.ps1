@@ -27,19 +27,21 @@ $tenantId = (Get-AzTenant).Id  # Re-use the tenant you opened Cloud Shell with
 Connect-MicrosoftTeams -TenantId $tenantId -UseDeviceAuthentication
 
 # ── 2. Show tenant-scoped templates and capture ODataId ────────────────────────
-$templates =
-    Get-CsTeamTemplateList |              # no -Locale switch – it doesn’t exist :contentReference[oaicite:0]{index=0}
-    Where-Object { $_.Scope -eq 'Tenant' } |
-    Select-Object @{n='Index';e={[array]::IndexOf($templates,$_) + 1}}, DisplayName, OdataId
-
-if (-not $templates) {
-    Write-Warning "No custom templates found in this tenant."
-    return
-}
-
+$templates = Get-CsTeamTemplateList
 $templates | Format-Table -AutoSize
-[int]$choice = Read-Host "Enter the Index of the template to export"
-$templateId = $templates[$choice-1].OdataId
+
+# Prompt user to select a template
+Write-Host "`nPlease select a template by entering the row number (1-$($templates.Count)):"
+do {
+    $choice = Read-Host "Enter your choice"
+    $choiceInt = $null
+    if ([int]::TryParse($choice, [ref]$choiceInt) -and $choiceInt -ge 1 -and $choiceInt -le $templates.Count) {
+        break
+    }
+    Write-Host "Invalid choice. Please enter a number between 1 and $($templates.Count)." -ForegroundColor Yellow
+} while ($true)
+
+$templateId = $templates[$choiceInt-1].OdataId
 
 # ── 3. Export the template to JSON ─────────────────────────────────────────────
 $exportPath = Join-Path $HOME "TeamTemplate.json"
@@ -49,11 +51,11 @@ $exportPath = Join-Path $HOME "TeamTemplate.json"
 Write-Host "✔ Template exported to $exportPath"
 
 # ── 4. Optional re-import as a new template ────────────────────────────────────
-if ((Read-Host "Import the (edited) JSON as a new template? [y/N]") -match '^[yY]') {
-    $json = Get-Content -Raw -Path $exportPath
-    New-CsTeamTemplate -Locale 'en-US' -Body $json            # -Locale IS required here :contentReference[oaicite:1]{index=1}
-    Write-Host "✔ New template created."
-}
+#if ((Read-Host "Import the (edited) JSON as a new template? [y/N]") -match '^[yY]') {
+ #   $json = Get-Content -Raw -Path $exportPath
+  #  New-CsTeamTemplate -Locale 'en-US' -Body $json            # -Locale IS required here :contentReference[oaicite:1]{index=1}
+   # Write-Host "✔ New template created."
+#}
 
 # ── 5. (Optional) Disconnect ───────────────────────────────────────────────────
 # Disconnect-MicrosoftTeams
