@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ClarityXDR/backend/internal/db"
-	"github.com/ClarityXDR/backend/internal/handlers"
-	"github.com/ClarityXDR/backend/internal/middleware"
+	"github.com/ClarityXDR/prod/website/backend/config"
+	"github.com/ClarityXDR/prod/website/backend/database"
+	"github.com/ClarityXDR/prod/website/backend/handlers"
+	"github.com/ClarityXDR/prod/website/backend/internal/middleware"
+
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -19,14 +21,17 @@ import (
 func main() {
 	log.Println("Starting ClarityXDR Backend Server...")
 
-	// Initialize database connection
-	database, err := db.NewDatabase()
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer database.Close()
+	// Load configuration
+	cfg := config.Load()
 
-	// Create router and set up routes
+	// Initialize database
+	db, err := database.Initialize(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+	defer db.Close()
+
+	// Create router
 	r := mux.NewRouter()
 
 	// Add security middleware
@@ -34,29 +39,31 @@ func main() {
 	r.Use(middleware.RateLimitMiddleware)
 	r.Use(middleware.LoggingMiddleware)
 
-	// Configure CORS properly
-	c := cors.New(cors.Options{
-		AllowedOrigins: []string{
-			os.Getenv("FRONTEND_URL"),
-			"https://" + os.Getenv("DOMAIN_NAME"),
-			"https://api." + os.Getenv("DOMAIN_NAME"),
-		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Requested-With"},
-		ExposedHeaders:   []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           86400,
-	})
+	// Initialize handlers
+	agentHandler := handlers.NewAgentHandler(db)
+	kqlHandler := handlers.NewKQLHandler(db)
+	clientHandler := handlers.NewClientHandler(db)
+	rulesHandler := handlers.NewRulesHandler(db)
+	licenseHandler := handlers.NewLicenseHandler(db)
+	logicAppHandler := handlers.NewLogicAppHandler(db)
+	mdeHandler := handlers.NewMDEHandler(db)
+	threatIntelHandler := handlers.NewThreatIntelHandler(db)
+	sentinelHandler := handlers.NewSentinelHandler(db)
 
-	// API routes with authentication
-	apiRouter := r.PathPrefix("/api").Subrouter()
-	apiRouter.Use(middleware.AuthMiddleware)
-
-	// Register handlers
-	handlers.RegisterRoutes(apiRouter, database)
+	// Register routes
+	api := r.PathPrefix("/api").Subrouter()
+	agentHandler.RegisterRoutes(api)
+	kqlHandler.RegisterRoutes(api)
+	clientHandler.RegisterRoutes(api)
+	rulesHandler.RegisterRoutes(api)
+	licenseHandler.RegisterRoutes(api)
+	logicAppHandler.RegisterRoutes(api)
+	mdeHandler.RegisterRoutes(api)
+	threatIntelHandler.RegisterRoutes(api)
+	sentinelHandler.RegisterRoutes(api)
 
 	// License validation endpoint (no auth required for Logic Apps)
-	r.HandleFunc("/api/licensing/validate", handlers.NewLicenseHandler(database).ValidateLicense).Methods("GET")
+	r.HandleFunc("/api/licensing/validate", handlers.NewLicenseHandler(db).ValidateLicense).Methods("GET")
 
 	// Health check endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -66,17 +73,27 @@ func main() {
 	}).Methods("GET")
 
 	// Serve static files from the React app (if running in production)
-	staticDir := os.Getenv("STATIC_DIR")
-	if staticDir != "" {
-		r.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
-	}
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./frontend/build/")))
 
-	// Apply CORS
+	// Setup CORS
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:8080"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+	})
+
 	handler := c.Handler(r)
+
+	// Get port from environment or use default
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	// Create HTTP server with timeouts
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
@@ -85,7 +102,7 @@ func main() {
 
 	// Start the server in a goroutine
 	go func() {
-		log.Println("Server starting on :8080")
+		log.Printf("Server starting on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Error starting server: %v", err)
 		}

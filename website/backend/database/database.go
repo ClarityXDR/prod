@@ -18,8 +18,8 @@ func Initialize(databaseURL string) (*sql.DB, error) {
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(25)
 
 	return db, nil
 }

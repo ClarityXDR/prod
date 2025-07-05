@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ClarityXDR/prod/website/backend/internal/models"
 	"log"
 	"time"
-
-	"github.com/ClarityXDR/backend/internal/models"
 )
 
 // Agent represents an AI agent in the system
@@ -246,4 +245,5 @@ func (a *InvoicingAgent) HandleTicket(ctx context.Context, ticket *models.Ticket
 	// Implementation for invoicing operations
 	// ...
 	return nil
+}
 }

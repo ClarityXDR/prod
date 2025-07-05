@@ -7,14 +7,14 @@ import (
 type Config struct {
 	DatabaseURL string
 	Port        string
-	Environment string
+	JWTSecret   string
 }
 
 func Load() *Config {
 	return &Config{
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:password@localhost/clarityxdr"),
+		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:password@postgres:5432/clarityxdr?sslmode=disable"),
 		Port:        getEnv("PORT", "8080"),
-		Environment: getEnv("ENVIRONMENT", "development"),
+		JWTSecret:   getEnv("JWT_SECRET", "default-secret-change-me"),
 	}
 }
 

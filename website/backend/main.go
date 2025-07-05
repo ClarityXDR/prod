@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"clarityxdr/backend/config"
-	"clarityxdr/backend/database"
-	"clarityxdr/backend/handlers"
+	"github.com/ClarityXDR/prod/website/backend/config"
+	"github.com/ClarityXDR/prod/website/backend/database"
+	"github.com/ClarityXDR/prod/website/backend/handlers"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"

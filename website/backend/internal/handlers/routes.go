@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ClarityXDR/backend/internal/db"
+	"github.com/ClarityXDR/prod/website/backend/internal/db"
 	"github.com/gorilla/mux"
 )
 
