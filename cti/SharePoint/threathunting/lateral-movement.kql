@@ -1,0 +1,24 @@
+// Detect potential lateral movement activities
+DeviceNetworkEvents
+| where Timestamp > ago(24h)
+| where RemotePort in (445, 135, 139, 3389, 22)
+| where InitiatingProcessName !in~ ("svchost.exe", "System", "services.exe")
+| where ActionType == "ConnectionSuccess"
+| summarize ConnectionCount = count(), 
+            DistinctPorts = dcount(RemotePort),
+            DistinctIPs = dcount(RemoteIP) 
+            by DeviceName, InitiatingProcessName, InitiatingProcessAccountName
+| where ConnectionCount > 10 or DistinctIPs > 5
+| project Timestamp = now(), 
+          DeviceName, 
+          ProcessName = InitiatingProcessName, 
+          AccountName = InitiatingProcessAccountName,
+          ConnectionCount,
+          DistinctPorts,
+          DistinctIPs,
+          RiskScore = case(
+              ConnectionCount > 50 or DistinctIPs > 20, "High",
+              ConnectionCount > 20 or DistinctIPs > 10, "Medium",
+              "Low"
+          )
+| order by RiskScore desc, ConnectionCount desc

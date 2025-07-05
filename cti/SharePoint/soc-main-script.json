@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/site-design-script-actions.schema.json",
+  "actions": [
+    {
+      "verb": "setSiteExternalSharingCapability",
+      "capability": "Disabled"
+    },
+    {
+      "verb": "applyTheme",
+      "themeName": "ClarityXDR Security Theme"
+    },
+    {
+      "verb": "setSiteBranding",
+      "navigationLayout": "Megamenu",
+      "headerLayout": "Extended",
+      "headerBackground": "Strong",
+      "showFooter": true,
+      "footerLayout": "Extended"
+    },
+    {
+      "verb": "addPrincipalToSPGroup",
+      "principal": "SOC-Analysts@clarityxdr.com",
+      "group": "Members"
+    },
+    {
+      "verb": "addPrincipalToSPGroup",
+      "principal": "SOC-Managers@clarityxdr.com",
+      "group": "Owners"
+    },
+    {
+      "verb": "setSiteLogo",
+      "url": "/SiteAssets/clarityxdr-logo.png"
+    }
+  ]
+}

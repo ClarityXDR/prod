@@ -1,0 +1,156 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/site-design-script-actions.schema.json",
+  "actions": [
+    {
+      "verb": "createSPList",
+      "listName": "Security Incidents",
+      "templateType": 100,
+      "subactions": [
+        {
+          "verb": "setDescription",
+          "description": "Track and manage security incidents"
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Text",
+          "displayName": "Incident ID",
+          "internalName": "IncidentID",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Choice",
+          "displayName": "Severity",
+          "choices": ["Critical", "High", "Medium", "Low", "Informational"],
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Choice",
+          "displayName": "Status",
+          "choices": ["New", "In Progress", "Resolved", "Closed", "False Positive"],
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "User",
+          "displayName": "Assigned Analyst",
+          "isRequired": false,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "MultiChoice",
+          "displayName": "MITRE Techniques",
+          "choices": ["T1566", "T1055", "T1053", "T1059", "T1003", "T1005", "T1078"],
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addContentType",
+          "name": "Security Incident"
+        }
+      ]
+    },
+    {
+      "verb": "createSPList",
+      "listName": "Threat Intelligence",
+      "templateType": 100,
+      "subactions": [
+        {
+          "verb": "setDescription",
+          "description": "Threat intelligence indicators and IOCs"
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Text",
+          "displayName": "Indicator",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Choice",
+          "displayName": "Type",
+          "choices": ["IP Address", "Domain", "URL", "File Hash", "Email", "Registry Key"],
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Choice",
+          "displayName": "Confidence",
+          "choices": ["High", "Medium", "Low"],
+          "isRequired": true,
+          "addToDefaultView": true
+        }
+      ]
+    },
+    {
+      "verb": "createSPList",
+      "listName": "KQL Queries",
+      "templateType": 101,
+      "subactions": [
+        {
+          "verb": "setDescription",
+          "description": "Repository of KQL queries for threat hunting and detection"
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Text",
+          "displayName": "Query Name",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Choice",
+          "displayName": "Category",
+          "choices": ["Threat Hunting", "Incident Response", "Compliance", "Performance"],
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "MultiChoice",
+          "displayName": "Data Sources",
+          "choices": ["Defender XDR", "Sentinel", "Azure AD", "Office 365"],
+          "addToDefaultView": true
+        }
+      ]
+    },
+    {
+      "verb": "createSPList",
+      "listName": "MITRE Coverage",
+      "templateType": 100,
+      "subactions": [
+        {
+          "verb": "setDescription",
+          "description": "MITRE ATT&CK coverage tracking"
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Text",
+          "displayName": "Technique ID",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Text",
+          "displayName": "Technique Name",
+          "isRequired": true,
+          "addToDefaultView": true
+        },
+        {
+          "verb": "addSPField",
+          "fieldType": "Number",
+          "displayName": "Coverage Percentage",
+          "addToDefaultView": true
+        }
+      ]
+    }
+  ]
+}
