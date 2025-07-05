@@ -72,6 +72,16 @@ $script:LogFile = "CTI-Deployment-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 $script:GitHubBaseUrl = "https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/cti"
 $script:IsCloudShell = $env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0' -or $ForceCloudShellMode
 
+# Store parameters in script scope for function access
+$script:TenantId = $TenantId
+$script:SubscriptionId = $SubscriptionId
+$script:ResourceGroupName = $ResourceGroupName
+$script:Location = $Location
+$script:SharePointTenantUrl = $SharePointTenantUrl
+$script:SharePointSiteUrl = $SharePointSiteUrl
+$script:GlobalAdminCredential = $GlobalAdminCredential
+$script:DeploymentName = $DeploymentName
+
 # Cloud Shell environment setup
 if ($script:IsCloudShell) {
     Write-Host "🌤️  Azure Cloud Shell detected - Configuring environment..." -ForegroundColor Cyan
@@ -116,8 +126,8 @@ function Write-DeploymentLog {
     Add-Content -Path $script:LogFile -Value $logMessage
     
     # Write to console with color
-    $color = $Colors[$Level]
-    if (-not $color) { $color = "White" }
+    # Choose the colour, defaulting to White if the key is missing (compatible with Windows PowerShell 5.1)
+    $color = if ($Colors.ContainsKey($Level)) { $Colors[$Level] } else { "White" }
     if ($NoNewLine) {
         Write-Host $Message -ForegroundColor $color -NoNewline
     } else {
@@ -208,7 +218,10 @@ function Initialize-CloudShellEnvironment {
 
 function New-CTIAppRegistration {
     param(
-        [string]$AppName = "ClarityXDR-CTI-Automation"
+        [string]$AppName = "ClarityXDR-CTI-Automation",
+        [string]$TenantId = $script:TenantId,
+        [string]$SubscriptionId = $script:SubscriptionId,
+        [PSCredential]$Credential = $script:GlobalAdminCredential
     )
     
     Write-DeploymentLog "Creating Azure AD App Registration..." -Level "Progress"
@@ -221,7 +234,7 @@ function New-CTIAppRegistration {
             # In Cloud Shell, use device code flow if context doesn't match
             Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -UseDeviceAuthentication
         } else {
-            Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -Credential $GlobalAdminCredential
+            Connect-AzAccount -TenantId $TenantId -SubscriptionId $SubscriptionId -Credential $Credential
         }
     } else {
         Write-DeploymentLog "Using existing Azure connection" -Level "Info"
@@ -287,10 +300,10 @@ function Deploy-AzureResources {
     Write-DeploymentLog "Deploying Azure resources..." -Level "Progress"
     
     # Create resource group if it doesn't exist
-    $rg = Get-AzResourceGroup -Name $ResourceGroupName -ErrorAction SilentlyContinue
+    $rg = Get-AzResourceGroup -Name $script:ResourceGroupName -ErrorAction SilentlyContinue
     if (-not $rg) {
-        Write-DeploymentLog "Creating resource group: $ResourceGroupName" -Level "Info"
-        $rg = New-AzResourceGroup -Name $ResourceGroupName -Location $Location
+        Write-DeploymentLog "Creating resource group: $script:ResourceGroupName" -Level "Info"
+        $rg = New-AzResourceGroup -Name $script:ResourceGroupName -Location $script:Location
     }
     
     # Prepare deployment parameters
@@ -300,13 +313,13 @@ function Deploy-AzureResources {
         sentinelWorkspaceKey = "" # Will be retrieved after creation
         graphAppId = $AppRegistration.AppId
         graphClientSecret = $AppRegistration.AppSecret
-        tenantId = $TenantId
+        tenantId = $script:TenantId
     }
     
     # Add Exchange credentials only if provided (not in Cloud Shell mode)
-    if ($GlobalAdminCredential) {
-        $deploymentParams.exchangeCredentialUsername = $GlobalAdminCredential.UserName
-        $deploymentParams.exchangeCredentialPassword = $GlobalAdminCredential.GetNetworkCredential().Password
+    if ($script:GlobalAdminCredential) {
+        $deploymentParams.exchangeCredentialUsername = $script:GlobalAdminCredential.UserName
+        $deploymentParams.exchangeCredentialPassword = $script:GlobalAdminCredential.GetNetworkCredential().Password
     } else {
         # In Cloud Shell, use placeholder values that will be updated post-deployment
         $deploymentParams.exchangeCredentialUsername = "svc-cti@$((Get-AzContext).Tenant.Id.Split('-')[0]).onmicrosoft.com"
@@ -316,20 +329,20 @@ function Deploy-AzureResources {
     
     # Check for existing Sentinel workspace or create new one
     Write-DeploymentLog "Checking for Sentinel workspace..." -Level "Info"
-    $workspace = Get-AzOperationalInsightsWorkspace -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
+    $workspace = Get-AzOperationalInsightsWorkspace -ResourceGroupName $script:ResourceGroupName -ErrorAction SilentlyContinue | Select-Object -First 1
     
     if (-not $workspace) {
         Write-DeploymentLog "Creating new Log Analytics workspace for Sentinel..." -Level "Info"
         $workspaceName = "CTI-Sentinel-$(Get-Random -Maximum 9999)"
-        $workspace = New-AzOperationalInsightsWorkspace -ResourceGroupName $ResourceGroupName -Name $workspaceName -Location $Location -Sku "PerGB2018"
+        $workspace = New-AzOperationalInsightsWorkspace -ResourceGroupName $script:ResourceGroupName -Name $workspaceName -Location $script:Location -Sku "PerGB2018"
         
         # Enable Sentinel
         Write-DeploymentLog "Enabling Microsoft Sentinel..." -Level "Info"
-        Set-AzSentinelOnboardingState -ResourceGroupName $ResourceGroupName -WorkspaceName $workspace.Name -DataConnectorsCheckRequirements $false
+        Set-AzSentinelOnboardingState -ResourceGroupName $script:ResourceGroupName -WorkspaceName $workspace.Name -DataConnectorsCheckRequirements $false
     }
     
     $deploymentParams.sentinelWorkspaceId = $workspace.CustomerId
-    $workspaceKey = Get-AzOperationalInsightsWorkspaceSharedKey -ResourceGroupName $ResourceGroupName -Name $workspace.Name
+    $workspaceKey = Get-AzOperationalInsightsWorkspaceSharedKey -ResourceGroupName $script:ResourceGroupName -Name $workspace.Name
     $deploymentParams.sentinelWorkspaceKey = $workspaceKey.PrimarySharedKey
     
     # Download and deploy ARM template
@@ -342,8 +355,8 @@ function Deploy-AzureResources {
     # Deploy ARM template
     Write-DeploymentLog "Deploying ARM template..." -Level "Progress"
     $deployment = New-AzResourceGroupDeployment `
-        -ResourceGroupName $ResourceGroupName `
-        -Name $DeploymentName `
+        -ResourceGroupName $script:ResourceGroupName `
+        -Name $script:DeploymentName `
         -TemplateFile $templateFile `
         -TemplateParameterObject $deploymentParams `
         -Verbose
@@ -362,6 +375,10 @@ function Deploy-AzureResources {
 }
 
 function Deploy-SharePointComponents {
+    param(
+        [hashtable]$AppRegistration
+    )
+    
     Write-DeploymentLog "Deploying SharePoint components..." -Level "Progress"
     
     # Connect to SharePoint with appropriate method
@@ -371,15 +388,15 @@ function Deploy-SharePointComponents {
         if ($env:AZUREPS_HOST_ENVIRONMENT -eq 'cloud-shell/1.0') {
             # In Cloud Shell, use interactive login for SharePoint
             Write-DeploymentLog "Using interactive authentication for SharePoint (Cloud Shell)" -Level "Info"
-            Connect-PnPOnline -Url $SharePointTenantUrl -Interactive
+            Connect-PnPOnline -Url $script:SharePointTenantUrl -Interactive
         } else {
             # Use credentials for non-Cloud Shell environments
-            Connect-PnPOnline -Url $SharePointTenantUrl -Credentials $GlobalAdminCredential
+            Connect-PnPOnline -Url $script:SharePointTenantUrl -Credentials $script:GlobalAdminCredential
         }
     } catch {
         # Fallback to web login if other methods fail
         Write-DeploymentLog "Falling back to web-based authentication" -Level "Warning"
-        Connect-PnPOnline -Url $SharePointTenantUrl -UseWebLogin
+        Connect-PnPOnline -Url $script:SharePointTenantUrl -UseWebLogin
     }
     
     # Download and execute SharePoint deployment script
@@ -399,8 +416,8 @@ function Deploy-SharePointComponents {
     if ($script:IsCloudShell) {
         # In Cloud Shell, run the script without credential parameter
         & $spDeployScript `
-            -TenantUrl $SharePointTenantUrl `
-            -SiteUrl $SharePointSiteUrl `
+            -TenantUrl $script:SharePointTenantUrl `
+            -SiteUrl $script:SharePointSiteUrl `
             -AppId $AppRegistration.AppId `
             -CertificatePath $certPath `
             -SOCManagerEmail "$((Get-AzContext).Account.Id)" `
@@ -408,11 +425,11 @@ function Deploy-SharePointComponents {
     } else {
         # Standard execution with credentials
         & $spDeployScript `
-            -TenantUrl $SharePointTenantUrl `
-            -SiteUrl $SharePointSiteUrl `
+            -TenantUrl $script:SharePointTenantUrl `
+            -SiteUrl $script:SharePointSiteUrl `
             -AppId $AppRegistration.AppId `
             -CertificatePath $certPath `
-            -SOCManagerEmail $GlobalAdminCredential.UserName `
+            -SOCManagerEmail $script:GlobalAdminCredential.UserName `
             -SentinelWorkspaceId $AzureDeployment.WorkspaceId
     }
     
@@ -623,8 +640,8 @@ Environment: $(if ($script:IsCloudShell) { "Azure Cloud Shell" } else { "Local P
 
 ## Key Information
 
-- **Resource Group**: $ResourceGroupName
-- **SharePoint Site**: $SharePointSiteUrl
+- **Resource Group**: $($script:ResourceGroupName)
+- **SharePoint Site**: $($script:SharePointSiteUrl)
 - **Sentinel Workspace ID**: $($DeploymentInfo.Azure.WorkspaceId)
 - **App Registration ID**: $($DeploymentInfo.AppRegistration.AppId)
 
@@ -645,11 +662,11 @@ Environment: $(if ($script:IsCloudShell) { "Azure Cloud Shell" } else { "Local P
    ``````
 
 3. **Access SharePoint Site**
-   - Navigate to: $SharePointSiteUrl
+   - Navigate to: $($script:SharePointSiteUrl)
    - Review the ThreatIndicatorsList
 
 4. **Monitor Logic Apps**
-   - Azure Portal > Resource Groups > $ResourceGroupName
+   - Azure Portal > Resource Groups > $($script:ResourceGroupName)
    - Check Logic Apps run history
 $cloudShellInstructions
 
@@ -715,14 +732,14 @@ try {
             AppSecret = $ExistingAppSecret
         }
     } else {
-        $appReg = New-CTIAppRegistration
+        $appReg = New-CTIAppRegistration -TenantId $script:TenantId -SubscriptionId $script:SubscriptionId -Credential $script:GlobalAdminCredential
     }
     
     # Step 3: Deploy Azure resources
     $azureDeployment = Deploy-AzureResources -AppRegistration $appReg
     
     # Step 4: Deploy SharePoint components
-    $spDeployment = Deploy-SharePointComponents
+    $spDeployment = Deploy-SharePointComponents -AppRegistration $appReg
     
     # Step 5: Deploy PowerShell modules
     Deploy-PowerShellModules -AzureDeployment $azureDeployment -SharePointDeployment $spDeployment
