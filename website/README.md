@@ -6,7 +6,7 @@
 
 ClarityXDR is an AI-driven security operations platform that transforms Microsoft Defender XDR into a mature, AI-driven SOC. Built with a "designed by humans, operated by AI" philosophy, ClarityXDR leverages multiple specialized AI agents to handle security operations, business functions, and customer interactions.
 
-![ClarityXDR Logo](https://raw.githubusercontent.com/ClarityXDR/prod/refs/heads/main/website/brand-assets/Icon_512x512.png)
+![ClarityXDR Logo](https://github.com/ClarityXDR/prod/blob/main/brand-assets/Icon_256x256.png)
 
 ## Features
 
