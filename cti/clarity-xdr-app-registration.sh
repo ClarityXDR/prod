@@ -2,6 +2,10 @@
 # ---------------------------------------------------------------------------
 # ClarityXDR App Registration Setup Script
 # ---------------------------------------------------------------------------
+# IMPORTANT: This script must be run with bash, not sh
+# Usage: bash ./clarityxdr-setup.sh [options]
+# OR make it executable: chmod +x clarityxdr-setup.sh && ./clarityxdr-setup.sh
+# ---------------------------------------------------------------------------
 # Creates a comprehensive Azure AD app registration with all permissions needed for:
 #   • Microsoft Defender XDR (Custom Detection Rules, Advanced Hunting, etc.)
 #   • Microsoft Sentinel (Analytic Rules, Security Operations)
@@ -10,13 +14,20 @@
 #   • Audit Logs and Directory Recommendations
 #   • Complete security automation pipeline capabilities
 #
-# Usage:  ./create-clarityxdr-app.sh [options]
+# Usage:  ./clarityxdr-setup.sh [options]
 # Options:
 #   -g, --resource-group    Resource group name
 #   -l, --location          Azure region (e.g., eastus, westeurope)
 #   -h, --help              Show help message
 # ---------------------------------------------------------------------------
 set -euo pipefail
+
+# Ensure we're running with bash
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "This script must be run with bash, not sh"
+    echo "Usage: bash $0 [options]"
+    exit 1
+fi
 
 # Color definitions for output
 RED='\033[0;31m'
@@ -34,14 +45,14 @@ echo "  • Add comprehensive security API permissions"
 echo "  • Assign RBAC roles for Sentinel and Log Analytics"
 echo "  • Create a Key Vault for secure secret storage"
 echo "  • Generate and store client credentials"
-echo -e "======================================================="
+echo "======================================================="
 
 # Handle command-line arguments
 RESOURCE_GROUP=""
 LOCATION=""
 
 # Parse command-line arguments
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   key="$1"
   case $key in
     -g|--resource-group)
@@ -87,9 +98,14 @@ if ! az account show &> /dev/null; then
 fi
 
 # Get subscription and tenant details
-SUB_NAME=$(az account show --query name -o tsv)
-SUB_ID=$(az account show --query id -o tsv)
-TENANT_ID=$(az account show --query tenantId -o tsv)
+SUB_NAME=$(az account show --query name -o tsv 2>/dev/null)
+SUB_ID=$(az account show --query id -o tsv 2>/dev/null)
+TENANT_ID=$(az account show --query tenantId -o tsv 2>/dev/null)
+
+if [ -z "$SUB_ID" ]; then
+  echo -e "${RED}Failed to retrieve subscription information. Please ensure you're logged in.${NC}"
+  exit 1
+fi
 
 echo -e "${GREEN}Using subscription: ${SUB_NAME} (${SUB_ID})${NC}"
 echo -e "${GREEN}Tenant ID: ${TENANT_ID}${NC}"
@@ -135,7 +151,7 @@ APP_NAME="ClarityXDR-App"
 echo "Checking if app registration already exists..."
 EXISTING_APP=$(az ad app list --display-name "${APP_NAME}" --query "[0]" 2>/dev/null)
 
-if [ ! -z "$EXISTING_APP" ] && [ "$EXISTING_APP" != "null" ]; then
+if [ -n "$EXISTING_APP" ] && [ "$EXISTING_APP" != "null" ]; then
   echo -e "${YELLOW}App registration '${APP_NAME}' already exists.${NC}"
   APP_ID=$(echo "$EXISTING_APP" | jq -r '.appId // empty')
   OBJECT_ID=$(echo "$EXISTING_APP" | jq -r '.id // empty')
@@ -195,6 +211,7 @@ echo "TENANT_ID=${TENANT_ID}" >> clarityxdr-credentials.env
 echo "SUBSCRIPTION_ID=${SUB_ID}" >> clarityxdr-credentials.env
 
 printf "%b\nAdding comprehensive API permissions for ClarityXDR...%b\n" "$BLUE" "$NC"
+echo -e "${YELLOW}Note: Permission messages 'Invoking az ad app permission grant...' can be ignored${NC}"
 
 ###############################################################################
 # 1️⃣ Microsoft Defender for Endpoint (Windows Defender ATP)                  #
@@ -413,7 +430,7 @@ if [ -z "$USER_ID" ]; then
   fi
 fi
 
-if [ ! -z "$USER_ID" ]; then
+if [ -n "$USER_ID" ]; then
   echo "Granting Key Vault Secrets Officer role to user..."
   if az role assignment create \
     --role "Key Vault Secrets Officer" \
@@ -442,7 +459,7 @@ SECRET_ATTEMPT=1
 while [ $SECRET_ATTEMPT -le $MAX_SECRET_ATTEMPTS ]; do
   SECRET_RESULT=$(az ad app credential reset --id "$APP_ID" --years "$SECRET_YEARS" --query password -o tsv 2>/dev/null)
   
-  if [ ! -z "$SECRET_RESULT" ]; then
+  if [ -n "$SECRET_RESULT" ]; then
     break
   fi
   
@@ -460,7 +477,7 @@ while [ $SECRET_ATTEMPT -le $MAX_SECRET_ATTEMPTS ]; do
   fi
 done
 
-if [ ! -z "$SECRET_RESULT" ]; then
+if [ -n "$SECRET_RESULT" ]; then
   # Store the secret in Key Vault (without displaying it)
   echo "Storing secret in Key Vault..."
   if az keyvault secret set \
@@ -520,7 +537,7 @@ echo -e "${YELLOW}NOTE: Allow 5-10 minutes for all permissions to propagate befo
 
 # Provide usage for automation
 echo -e "\n${BLUE}For automated/scripted deployment:${NC}"
-echo "curl -sL https://your-repo-url/create-clarityxdr-app.sh | bash -s -- --resource-group YOUR_RG_NAME --location YOUR_LOCATION"
+echo "curl -sL https://your-repo-url/clarityxdr-setup.sh | bash -s -- --resource-group YOUR_RG_NAME --location YOUR_LOCATION"
 
 # Final check
 if [ -f "clarityxdr-credentials.env" ]; then
