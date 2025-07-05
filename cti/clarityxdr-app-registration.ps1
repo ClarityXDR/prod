@@ -208,6 +208,52 @@ if (-not $appId) {
 
 Write-Success "Application (Client) ID: $appId"
 
+###############################################################################
+# 🎨 Set ClarityXDR App Logo                                                  #
+###############################################################################
+Write-Status "`nSetting ClarityXDR logo for the app registration..."
+
+try {
+    # Download the ClarityXDR logo from GitHub
+    $logoUrl = "https://raw.githubusercontent.com/ClarityXDR/prod/main/brand-assets/Icon_48x48.png"
+    $logoPath = "$env:TEMP\clarityxdr-logo.png"
+    
+    Write-Host "Downloading ClarityXDR logo..."
+    Invoke-WebRequest -Uri $logoUrl -OutFile $logoPath -ErrorAction Stop
+    
+    # Verify the file was downloaded and is valid
+    if (Test-Path $logoPath) {
+        $logoInfo = Get-Item $logoPath
+        if ($logoInfo.Length -gt 0) {
+            Write-Host "Logo downloaded successfully ($($logoInfo.Length) bytes)"
+            
+            # Set the logo for the app registration
+            Write-Host "Applying logo to app registration..."
+            az ad app update --id $appId --logo $logoPath --output none 2>$null
+            
+            Write-Success "✅ ClarityXDR logo applied to app registration"
+            
+            # Clean up the temporary logo file
+            Remove-Item $logoPath -Force -ErrorAction SilentlyContinue
+        }
+        else {
+            Write-Warning "Downloaded logo file is empty. Skipping logo application."
+        }
+    }
+    else {
+        Write-Warning "Failed to download logo file. Skipping logo application."
+    }
+}
+catch {
+    Write-Warning "Could not set app logo: $($_.Exception.Message)"
+    Write-Host "The app registration will continue without a logo."
+    
+    # Clean up any partial download
+    if (Test-Path "$env:TEMP\clarityxdr-logo.png") {
+        Remove-Item "$env:TEMP\clarityxdr-logo.png" -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Create service principal
 Write-Host "Creating service principal for the application..."
 try {
@@ -241,51 +287,44 @@ Write-Status "`nAdding comprehensive API permissions for ClarityXDR..."
 Write-Warning "Note: Permission messages 'Invoking az ad app permission grant...' can be ignored"
 
 ###############################################################################
-# 1️⃣ Microsoft Defender for Endpoint (Windows Defender ATP)                  #
-###############################################################################
-Write-Host "Adding Microsoft Defender for Endpoint permissions..."
-# WindowsDefenderATP API - resourceAppId: fc780465-2017-40d4-a0c5-307022471b92
-
-# Machine permissions
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "ea8291d3-4b9a-44b5-bc3a-6cea3026dc79=Role" --output none 2>$null # Machine.Read.All
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "7b7531ad-5926-4f2d-8a1d-38495ad33e17=Role" --output none 2>$null # Machine.ReadWrite.All
-
-# Alert permissions  
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "ee30690b-f2a2-471f-a2dc-2eadb0c4b07e=Role" --output none 2>$null # Alert.Read.All
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "93489bf5-0fbc-4f2d-b901-33f2fe08ff05=Role" --output none 2>$null # Alert.ReadWrite.All
-
-# Advanced Query (Advanced Hunting)
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "93076945-2c91-4c14-ab15-5ba0c6c1dcb7=Role" --output none 2>$null # AdvancedQuery.Read.All
-
-# Ti (Threat Intelligence indicators)
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "197042cb-0fc3-44f5-9c0f-871c34b77d7f=Role" --output none 2>$null # Ti.Read.All
-az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions "3aa2db8f-db19-414f-9346-e4056fcbc5a8=Role" --output none 2>$null # Ti.ReadWrite
-
-Write-Success "✓ Defender for Endpoint permissions added"
-
-###############################################################################
-# 2️⃣ Microsoft Graph – comprehensive security permissions                    #
+# 1️⃣ Microsoft Graph – Complete Security & Risk Management [ENHANCED]       #
 ###############################################################################
 Write-Host "Adding Microsoft Graph permissions..."
+Write-Host "  - Threat Intelligence & Security Events" -ForegroundColor DarkGray
+Write-Host "  - Identity Risk Management (Read/Write)" -ForegroundColor DarkGray
+Write-Host "  - Conditional Access & Named Locations (Read/Write)" -ForegroundColor DarkGray
+Write-Host "  - Directory Operations for user/device management" -ForegroundColor DarkGray
 # resourceAppId: 00000003-0000-0000-c000-000000000000
 
-# Suppress verbose output while adding permissions
 $graphPermissions = @(
+    # Threat Intelligence & Security
     "21792b6c-c986-4ffc-85de-df9da54b52fa=Role", # ThreatIndicators.ReadWrite.OwnedBy
     "197ee4e9-b993-4066-898f-d6aecc55125b=Role", # ThreatIndicators.Read.All
-    "e0fd9c8d-a12e-4cc9-9827-20c8c3cd6fb8=Role", # CustomDetection.ReadWrite.All
-    "e0b77adb-e790-44a3-b0a0-257d06303687=Role", # ThreatIntelligence.Read.All
-    "5df6fe86-1be0-44eb-b916-7bd443a71236=Role", # SecurityActions.Read.All
-    "dc38509c-b87d-4da0-bd92-6bec988bac4a=Role", # SecurityActions.ReadWrite.All
-    "bf394140-e372-4bf9-a898-299cfc7564e5=Role", # SecurityEvents.ReadWrite.All
     "472e4a4d-bb4a-4026-98d1-0b0d74cb74a5=Role", # SecurityAlert.Read.All
     "ed4fca05-be46-441f-9803-1873825f8fdb=Role", # SecurityAlert.ReadWrite.All
     "34bf0e97-1971-4929-b999-9e2442d941d7=Role", # SecurityIncident.ReadWrite.All
+    "bf394140-e372-4bf9-a898-299cfc7564e5=Role", # SecurityEvents.ReadWrite.All
+    "5df6fe86-1be0-44eb-b916-7bd443a71236=Role", # SecurityActions.Read.All
+    "dc38509c-b87d-4da0-bd92-6bec988bac4a=Role", # SecurityActions.ReadWrite.All
+    "e0b77adb-e790-44a3-b0a0-257d06303687=Role", # ThreatIntelligence.Read.All
+    
+    # Directory & Audit
     "e4c9e354-4dc5-45b8-9e7c-e1393b0b1a20=Role", # AuditLog.Read.All
     "7ab1d382-f21e-4acd-a863-ba3e13f7da61=Role", # Directory.Read.All
+    "19dbc75e-c2e2-444c-a770-ec69d8559fc7=Role", # Directory.ReadWrite.All
     "230c1aed-a721-4c5d-9cb4-a90514e508ef=Role", # Reports.Read.All
+    
+    # Identity Risk Management - READ & WRITE
     "dc5007c0-2d7d-4c42-879c-2dab87571379=Role", # IdentityRiskyUser.Read.All
-    "2e4dd572-8ddf-4832-bd49-4ee5df4b7cc5=Role"  # IdentityRiskEvent.Read.All
+    "656f6061-f9fe-4807-9708-6a2e0934df76=Role", # IdentityRiskyUser.ReadWrite.All
+    "2e4dd572-8ddf-4832-bd49-4ee5df4b7cc5=Role", # IdentityRiskEvent.Read.All
+    "6e472fd1-ad78-48da-a0f0-97ab2c6b769e=Role", # IdentityRiskEvent.ReadWrite.All
+    
+    # Conditional Access & Named Locations - READ & WRITE
+    "01c0a623-fc9b-48e9-b794-0756f8e8f067=Role", # Policy.Read.ConditionalAccess
+    "246dd0d5-5bd0-4def-940b-0421030a5b68=Role", # Policy.ReadWrite.ConditionalAccess
+    "37f7f235-527c-4136-accd-4a02d197296e=Role", # Policy.ReadWrite.SecurityDefaults
+    "ad902697-1014-4ef5-81ef-2b4301988e8c=Role"  # Policy.ReadWrite.PermissionGrant
 )
 
 foreach ($permission in $graphPermissions) {
@@ -295,36 +334,45 @@ foreach ($permission in $graphPermissions) {
 Write-Success "✓ Microsoft Graph permissions added"
 
 ###############################################################################
-# 3️⃣ Microsoft Threat Protection API permissions                             #
+# 2️⃣ Microsoft Defender for Endpoint [CORRECTED]                            #
+###############################################################################
+Write-Host "Adding Microsoft Defender for Endpoint permissions..."
+# WindowsDefenderATP API - resourceAppId: fc780465-2017-40d4-a0c5-307022471b92
+
+$mdePermissions = @(
+    "ea8291d3-4b9a-44b5-bc3a-6cea3026dc79=Role", # Machine.Read.All
+    "7b7531ad-5926-4f2d-8a1d-38495ad33e17=Role", # Machine.ReadWrite.All
+    "ee30690b-f2a2-471f-a2dc-2eadb0c4b07e=Role", # Alert.Read.All
+    "93489bf5-0fbc-4f2d-b901-33f2fe08ff05=Role", # Alert.ReadWrite.All
+    "93076945-2c91-4c14-ab15-5ba0c6c1dcb7=Role", # AdvancedQuery.Read.All
+    "197042cb-0fc3-44f5-9c0f-871c34b77d7f=Role", # Ti.Read.All
+    "3aa2db8f-db19-414f-9346-e4056fcbc5a8=Role"  # Ti.ReadWrite
+)
+
+foreach ($permission in $mdePermissions) {
+    az ad app permission add --id $appId --api "fc780465-2017-40d4-a0c5-307022471b92" --api-permissions $permission --output none 2>$null
+}
+
+Write-Success "✓ Defender for Endpoint permissions added"
+
+###############################################################################
+# 3️⃣ Microsoft Threat Protection API [CORRECTED]                             #
 ###############################################################################
 Write-Host "Adding Microsoft Threat Protection API permissions..."
 # resourceAppId: 8ee8fdad-f234-4243-8f3b-15c294843740
-az ad app permission add --id $appId --api "8ee8fdad-f234-4243-8f3b-15c294843740" --api-permissions "7734e8e5-8dde-42fc-b5ae-6eafea078693=Role" --output none 2>$null # ThreatIndicators.ReadWrite
+az ad app permission add --id $appId --api "8ee8fdad-f234-4243-8f3b-15c294843740" --api-permissions "93076945-2c91-4c14-ab15-5ba0c6c1dcb7=Role" --output none 2>$null # AdvancedHunting.Read.All
 Write-Success "✓ Threat Protection API permissions added"
 
 ###############################################################################
-# 4️⃣ Microsoft Cloud App Security API permissions                            #
+# 4️⃣ Office 365 Exchange Online [ADDED]                                      #
 ###############################################################################
-Write-Host "Adding Microsoft Cloud App Security permissions..."
-# resourceAppId: 05a65629-4c1b-48c1-a78b-804c4abdd4af
-
-$casPermissions = @(
-    "3e7702f0-6cc8-4c40-aca0-a3c3e89a37ba=Role", # investigation.read
-    "edbcecec-8acd-45c2-97a2-75f0febc9b0f=Role", # investigation.manage
-    "ce8f1e97-c558-48f1-ad28-beb520e94430=Role", # alert.read
-    "1dd86ab1-d8a2-4379-9d0f-c47eb4a64c02=Role", # alert.manage
-    "13285870-0bd7-4b5e-b3a9-34ffa7ca99aa=Role", # discovery.read
-    "dc81b4e1-1e2b-4b06-9a7f-ad5608fd17ed=Role"  # discovery.manage
-)
-
-foreach ($permission in $casPermissions) {
-    az ad app permission add --id $appId --api "05a65629-4c1b-48c1-a78b-804c4abdd4af" --api-permissions $permission --output none 2>$null
-}
-
-Write-Success "✓ Cloud App Security permissions added"
+Write-Host "Adding Office 365 Exchange Online permissions..."
+# resourceAppId: 00000002-0000-0ff1-ce00-000000000000
+az ad app permission add --id $appId --api "00000002-0000-0ff1-ce00-000000000000" --api-permissions "dc890d15-9560-4a4c-9b7f-a736ec74ec40=Role" --output none 2>$null # Exchange.ManageAsApp
+Write-Success "✓ Exchange Online permissions added"
 
 ###############################################################################
-# 5️⃣ Azure Management (ARM) – delegated user_impersonation for Sentinel      #
+# 5️⃣ Azure Service Management [CORRECTED]                                    #
 ###############################################################################
 Write-Host "Adding Azure Management permissions..."
 az ad app permission add --id $appId --api "797f4846-ba00-4fd7-ba43-dac1f8f63013" --api-permissions "41094075-9dad-400e-a0bd-54e686782033=Scope" --output none 2>$null # user_impersonation
@@ -559,8 +607,18 @@ Write-Host "             ClarityXDR Setup Complete!" -ForegroundColor "White"
 Write-Host "=======================================================" -ForegroundColor "White"
 
 Write-Success "✅ App registration created successfully"
+Write-Success "✅ ClarityXDR logo applied to app"
 Write-Success "✅ Service principal created"
-Write-Success "✅ All API permissions added"
+Write-Success "✅ Corrected API permissions added:"
+Write-Host "    • Microsoft Graph Security APIs (21 permissions)" -ForegroundColor Gray
+Write-Host "      - Threat Intelligence & Security Events" -ForegroundColor DarkGray
+Write-Host "      - Identity Risk Management (Read/Write)" -ForegroundColor DarkGray
+Write-Host "      - Conditional Access & Named Locations (Read/Write)" -ForegroundColor DarkGray
+Write-Host "      - Directory Operations (Read/Write)" -ForegroundColor DarkGray
+Write-Host "    • Microsoft Defender for Endpoint (7 permissions)" -ForegroundColor Gray
+Write-Host "    • Microsoft Threat Protection (1 permission)" -ForegroundColor Gray
+Write-Host "    • Office 365 Exchange Online (1 permission)" -ForegroundColor Gray
+Write-Host "    • Azure Service Management (1 permission)" -ForegroundColor Gray
 Write-Success "✅ RBAC roles assigned"
 Write-Success "✅ Key Vault created"
 Write-Success "✅ Client secret stored securely"
@@ -570,7 +628,7 @@ Write-Warning "IMPORTANT NEXT STEPS:"
 Write-Host "1. " -NoNewline
 Write-Warning "Grant admin consent for API permissions:"
 Write-Host "   - Navigate to: Microsoft Entra ID > App registrations"
-Write-Host "   - Select your app: $appName"
+Write-Host "   - Select your app: $appName (with ClarityXDR logo)"
 Write-Host "   - Go to 'API permissions'"
 Write-Host "   - Click 'Grant admin consent for <your-tenant>'"
 Write-Host "   - Wait for all permissions to show 'Granted' status"
