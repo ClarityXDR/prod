@@ -216,7 +216,7 @@ Write-Status "`nSetting ClarityXDR logo for the app registration..."
 try {
     # Download the ClarityXDR logo from GitHub
     $logoUrl = "https://raw.githubusercontent.com/ClarityXDR/prod/main/brand-assets/Icon_48x48.png"
-    $logoPath = "$env:TEMP\clarityxdr-logo.png"
+    $logoPath = $home + "\clarityxdr-logo.png"
     
     Write-Host "Downloading ClarityXDR logo..."
     Invoke-WebRequest -Uri $logoUrl -OutFile $logoPath -ErrorAction Stop
@@ -249,8 +249,8 @@ catch {
     Write-Host "The app registration will continue without a logo."
     
     # Clean up any partial download
-    if (Test-Path "$env:TEMP\clarityxdr-logo.png") {
-        Remove-Item "$env:TEMP\clarityxdr-logo.png" -Force -ErrorAction SilentlyContinue
+    if (Test-Path "$home\clarityxdr-logo.png") {
+        Remove-Item "$home\clarityxdr-logo.png" -Force -ErrorAction SilentlyContinue
     }
 }
 

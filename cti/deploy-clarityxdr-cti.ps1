@@ -242,33 +242,6 @@ function New-CTIAppRegistration {
         Set-AzContext -SubscriptionId $SubscriptionId -TenantId $TenantId | Out-Null
     }
     
-    # Required API permissions
-    $requiredPermissions = @(
-        @{
-            API = "Microsoft Graph"
-            Permissions = @(
-                "ThreatIndicators.ReadWrite.OwnedBy",
-                "SecurityEvents.Read.All",
-                "Policy.Read.All",
-                "Policy.ReadWrite.ConditionalAccess",
-                "Application.ReadWrite.All"
-            )
-        },
-        @{
-            API = "Office 365 Exchange Online"
-            Permissions = @(
-                "Exchange.ManageAsApp"
-            )
-        },
-        @{
-            API = "Microsoft Threat Protection"
-            Permissions = @(
-                "Ti.ReadWrite",
-                "AdvancedHunting.Read.All"
-            )
-        }
-    )
-    
     # Create app registration
     $app = New-AzADApplication -DisplayName $AppName -IdentifierUris "https://$AppName.clarityxdr.com"
     $appId = $app.AppId
@@ -755,7 +728,7 @@ try {
     }
     
     $validationResult = Test-Deployment -DeploymentInfo $deploymentInfo
-    
+    $validationResult | Format-Table
     # Step 8: Create quick start guide
     New-QuickStartGuide -DeploymentInfo $deploymentInfo
     
