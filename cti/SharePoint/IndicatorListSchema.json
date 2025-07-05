@@ -1,0 +1,248 @@
+{
+  "Title": "ThreatIndicatorsList",
+  "Description": "Central repository for threat intelligence indicators across all security platforms",
+  "Columns": [
+    {
+      "Name": "IndicatorId",
+      "Type": "Text",
+      "Required": true,
+      "Description": "Unique identifier for the indicator"
+    },
+    {
+      "Name": "IndicatorType",
+      "Type": "Choice",
+      "Required": true,
+      "Choices": [
+        "IPAddress",
+        "Domain",
+        "URL",
+        "FileHash",
+        "Certificate",
+        "Email"
+      ],
+      "Description": "Type of indicator"
+    },
+    {
+      "Name": "IndicatorValue",
+      "Type": "Text",
+      "Required": true,
+      "Description": "The actual indicator value (IP, hash, domain, etc.)"
+    },
+    {
+      "Name": "Title",
+      "Type": "Text",
+      "Required": true,
+      "Description": "Indicator name or brief description"
+    },
+    {
+      "Name": "Description",
+      "Type": "Note",
+      "Required": false,
+      "Description": "Detailed description of the threat"
+    },
+    {
+      "Name": "TLP",
+      "Type": "Choice",
+      "Required": true,
+      "Choices": [
+        "White",
+        "Green",
+        "Amber",
+        "Red"
+      ],
+      "DefaultValue": "Amber",
+      "Description": "Traffic Light Protocol classification"
+    },
+    {
+      "Name": "Confidence",
+      "Type": "Number",
+      "Required": true,
+      "Min": 0,
+      "Max": 100,
+      "DefaultValue": 50,
+      "Description": "Confidence score (0-100)"
+    },
+    {
+      "Name": "Severity",
+      "Type": "Choice",
+      "Required": true,
+      "Choices": [
+        "Low",
+        "Medium",
+        "High",
+        "Critical"
+      ],
+      "DefaultValue": "Medium",
+      "Description": "Severity of the threat"
+    },
+    {
+      "Name": "Source",
+      "Type": "Text",
+      "Required": true,
+      "Description": "Source of the indicator"
+    },
+    {
+      "Name": "ValidFrom",
+      "Type": "DateTime",
+      "Required": true,
+      "DefaultValue": "[Now]",
+      "Description": "Date from which the indicator is valid"
+    },
+    {
+      "Name": "ValidUntil",
+      "Type": "DateTime",
+      "Required": true,
+      "DefaultValue": "[Now+90Days]",
+      "Description": "Expiration date of the indicator"
+    },
+    {
+      "Name": "LastValidated",
+      "Type": "DateTime",
+      "Required": false,
+      "Description": "Last date indicator was validated"
+    },
+    {
+      "Name": "ValidationStatus",
+      "Type": "Choice",
+      "Required": true,
+      "Choices": [
+        "Pending",
+        "Valid",
+        "Invalid",
+        "Expired",
+        "FalsePositive"
+      ],
+      "DefaultValue": "Pending",
+      "Description": "Current validation status"
+    },
+    {
+      "Name": "ReputationScore",
+      "Type": "Number",
+      "Required": false,
+      "Min": 0,
+      "Max": 100,
+      "Description": "Latest reputation score from validation services"
+    },
+    {
+      "Name": "ReputationSource",
+      "Type": "Text",
+      "Required": false,
+      "Description": "Source of the reputation score"
+    },
+    {
+      "Name": "Tags",
+      "Type": "Text",
+      "Required": false,
+      "Description": "Tags for categorization"
+    },
+    {
+      "Name": "DeploymentTargets",
+      "Type": "MultiChoice",
+      "Required": true,
+      "Choices": [
+        "MDE",
+        "EntraID",
+        "MDCA",
+        "ExchangeEOP",
+        "ExchangeTABL",
+        "AzureFirewall",
+        "AzurePolicy",
+        "AzureFrontDoor",
+        "OnPremFirewall",
+        "OnPremProxy",
+        "ThirdParty"
+      ],
+      "Description": "Platforms where this indicator should be deployed"
+    },
+    {
+      "Name": "DeploymentStatus",
+      "Type": "Text",
+      "Required": false,
+      "Description": "JSON object tracking deployment status across platforms"
+    },
+    {
+      "Name": "LastDeploymentAttempt",
+      "Type": "DateTime",
+      "Required": false,
+      "Description": "Timestamp of last deployment attempt"
+    },
+    {
+      "Name": "LastDeploymentSuccess",
+      "Type": "DateTime",
+      "Required": false,
+      "Description": "Timestamp of last successful deployment"
+    },
+    {
+      "Name": "AddedBy",
+      "Type": "User",
+      "Required": true,
+      "Description": "User who added the indicator"
+    },
+    {
+      "Name": "ModifiedBy",
+      "Type": "User",
+      "Required": false,
+      "Description": "User who last modified the indicator"
+    },
+    {
+      "Name": "Comments",
+      "Type": "Note",
+      "Required": false,
+      "Description": "Comments or notes about this indicator"
+    },
+    {
+      "Name": "ActionHistory",
+      "Type": "Note",
+      "Required": false,
+      "Description": "JSON log of all actions taken on this indicator"
+    }
+  ],
+  "Views": [
+    {
+      "Name": "All Indicators",
+      "Columns": [
+        "IndicatorType",
+        "IndicatorValue",
+        "Title",
+        "Severity",
+        "Confidence",
+        "TLP",
+        "ValidUntil",
+        "ValidationStatus"
+      ]
+    },
+    {
+      "Name": "Deployment Status",
+      "Columns": [
+        "IndicatorType",
+        "IndicatorValue",
+        "DeploymentTargets",
+        "DeploymentStatus",
+        "LastDeploymentAttempt",
+        "LastDeploymentSuccess"
+      ]
+    },
+    {
+      "Name": "Validation Status",
+      "Columns": [
+        "IndicatorType",
+        "IndicatorValue",
+        "ValidationStatus",
+        "ReputationScore",
+        "ReputationSource",
+        "LastValidated"
+      ]
+    },
+    {
+      "Name": "Expiring Soon",
+      "Columns": [
+        "IndicatorType",
+        "IndicatorValue",
+        "Title",
+        "Severity",
+        "ValidUntil"
+      ],
+      "Filter": "ValidUntil < [Today+30Days] AND ValidationStatus != 'Expired'"
+    }
+  ]
+}

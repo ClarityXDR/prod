@@ -1,144 +1,144 @@
 # Cyber Threat Intelligence (CTI)
 
-This directory contains cyber threat intelligence feeds, indicators of compromise (IOCs), and threat intelligence integration scripts for ClarityXDR platform.
+This directory contains the Central Threat Intelligence Indicator Management, Reputation and Reporting solution for ClarityXDR platform.
 
 ## 📋 Overview
 
-The CTI module provides automated threat intelligence collection, processing, and integration capabilities:
+The CTI module provides a centralized indicator management system with multi-platform deployment:
 
-- **IOC Management**: Automated import and synchronization of threat indicators
-- **Feed Integration**: Support for multiple threat intelligence feeds
-- **Enrichment**: Automatic enrichment of alerts with threat context
-- **Attribution**: Threat actor and campaign attribution data
+- **Centralized Management**: SharePoint List-backed indicator database with Teams frontend
+- **Multi-Platform Deployment**: Automated deployment to all security platforms
+- **Bidirectional Sync**: Changes in any system are reflected everywhere
+- **Lifecycle Management**: Complete lifecycle from ingestion to retirement
+- **Reputation Tracking**: Monitor and respond to reputation changes
 
-## 📁 Directory Structure
+## 📁 Solution Architecture
 
 ```
-cti/
-├── 📂 feeds/                  # Threat intelligence feed configurations
-├── 📂 iocs/                   # Indicators of Compromise
-│   ├── 📂 hashes/            # File hashes (MD5, SHA1, SHA256)
-│   ├── 📂 domains/           # Malicious domains and URLs
-│   ├── 📂 ips/               # Malicious IP addresses
-│   └── 📂 registry/          # Registry-based IOCs
-├── 📂 scripts/               # CTI automation scripts
-├── 📂 reports/               # Threat intelligence reports
-└── 📂 attribution/           # Threat actor and campaign data
+┌─────────────────────────┐      ┌─────────────────────────────┐
+│                         │      │                             │
+│    Teams Interface      │◄────►│   SharePoint Indicator List │
+│                         │      │                             │
+└─────────────────────────┘      └───────────────┬─────────────┘
+                                                 │
+                                                 ▼
+                                  ┌─────────────────────────────┐
+                                  │                             │
+                                  │      Logic Apps Layer       │
+                                  │                             │
+                                  └───────┬───────┬───────┬─────┘
+                                          │       │       │
+         ┌───────────────────────────────┐│       │       │
+         ▼                               ▼│       ▼       ▼
+┌──────────────────┐    ┌──────────────────┐  ┌───────┐  ┌───────────────────┐
+│                  │    │                  │  │       │  │                   │
+│ Microsoft 365    │    │ Azure            │  │ On-   │  │ Third-Party       │
+│ Security Stack   │    │ Security Stack   │  │ Prem  │  │ Security Systems  │
+│                  │    │                  │  │       │  │                   │
+└──────────────────┘    └──────────────────┘  └───────┘  └───────────────────┘
 ```
 
-## 🔄 Feed Sources
+## 🛠️ Components
 
-### Supported Feed Types
-- **Commercial Feeds**: Integration with premium CTI providers
-- **Open Source**: MISP, AlienVault OTX, Abuse.ch feeds
-- **Government**: US-CERT, NCSC, and other government sources
-- **Industry**: Information sharing groups and consortiums
-- **Internal**: Organization-specific IOCs and hunting results
+### SharePoint Indicator List
+Central database for all threat indicators with fields matching industry standards.
 
-### Feed Formats
-- **STIX/TAXII**: Industry standard format support
-- **JSON**: Custom JSON feed parsing
-- **CSV**: Simple comma-separated value files
-- **XML**: Legacy XML-based feeds
-- **API**: RESTful API integrations
+### Teams Management Interface
+User-friendly interface for viewing, adding, and managing indicators.
 
-## 🛠️ Scripts and Tools
+### Logic Apps Workflows
+- **Indicator Ingestion**: Add new indicators to SharePoint from feeds
+- **Platform Deployment**: Deploy indicators to appropriate platforms
+- **Synchronization**: Keep all platforms in sync with SharePoint
+- **Reputation Monitoring**: Update indicators when reputation changes
+- **Lifecycle Management**: Remove expired or false positive indicators
 
-### IOC Processing Scripts
+### Deployment Targets
+
+**Microsoft 365 Security**
+- Microsoft Defender for Endpoint (MDE)
+- Entra ID Named Locations
+- Microsoft Defender for Cloud Apps (MDCA)
+- Exchange Online Protection
+- Microsoft Sentinel
+
+**Azure Security**
+- Azure Firewall
+- Azure Front Door WAF
+- Azure Policy
+- Defender for Cloud
+
+**On-Premises**
+- Network Security Devices
+- Proxy/Firewall Systems
+- EDR/Antivirus Solutions
+
+## 🔄 Indicator Management Workflows
+
+### Adding New Indicators
 ```powershell
-# Import IOCs from various feed formats
-.\Import-ThreatIntelligence.ps1 -FeedType "STIX" -SourcePath "feeds/apt29-indicators.json"
+# Add indicator via PowerShell
+.\Add-CTIIndicator.ps1 -Type "IPAddress" -Value "192.168.1.100" -TLP "Amber" -PlatformTargets "MDE,EntraID,MDCA"
 
-# Sync IOCs with Microsoft Defender
-.\Sync-DefenderIOCs.ps1 -IOCFile "iocs/latest-malware-hashes.csv"
-
-# Enrich alerts with threat context
-.\Enrich-AlertsWithCTI.ps1 -TimeRange "7d"
+# Or use the Teams interface to add indicators manually
 ```
 
-### Feed Management
+### Automated Deployments
+Logic Apps automatically deploy indicators to appropriate security platforms:
+- IP addresses → Network security, MDCA, Entra ID
+- Domains → DNS filtering, Exchange, MDE
+- File hashes → MDE, Antivirus
+- URLs → Proxy filtering, Exchange, MDE
+
+### Reputation Management
 ```powershell
-# Configure new threat intelligence feed
-.\Add-CTIFeed.ps1 -FeedName "Emerging Threats" -URL "https://rules.emergingthreats.net/fwrules/"
+# Check indicator reputation
+.\Get-IndicatorReputation.ps1 -Value "192.168.1.100"
 
-# Update all configured feeds
-.\Update-AllFeeds.ps1 -Schedule "Hourly"
-
-# Validate IOC quality and remove false positives
-.\Validate-IOCs.ps1 -IOCSet "domains" -Whitelist "corporate-domains.txt"
+# Update indicator reputation
+.\Update-IndicatorReputation.ps1 -Value "192.168.1.100" -NewStatus "Clean" -Reason "False positive"
 ```
 
-## 📊 IOC Categories
+### Indicator Lifecycle
+1. **Ingestion**: Added to SharePoint from feeds or manual entry
+2. **Validation**: Checked against reputation services
+3. **Deployment**: Pushed to appropriate security platforms
+4. **Monitoring**: Regular reputation checks and usage metrics
+5. **Retirement**: Automatic removal when expired or reputation changes
 
-### File-based Indicators
-- **Malware Hashes**: MD5, SHA1, SHA256 hashes of known malicious files
-- **File Names**: Suspicious file names and patterns
-- **File Paths**: Common malware installation locations
-- **Digital Signatures**: Revoked or suspicious code signing certificates
+## 📊 Reporting and Metrics
 
-### Network Indicators
-- **Malicious IPs**: Command and control server addresses
-- **Suspicious Domains**: Malicious and phishing domains
-- **URLs**: Specific malicious URLs and patterns
-- **Network Protocols**: Unusual protocol usage patterns
+The solution provides comprehensive reporting through:
+- Power BI dashboards
+- Teams interface reporting tab
+- Integration with security operations reporting
 
-### Host-based Indicators
-- **Registry Keys**: Malicious registry modifications
-- **Service Names**: Suspicious service installations
-- **Process Names**: Known malicious process names
-- **Mutex Names**: Malware-specific mutex identifiers
-
-## 🔍 Threat Actor Attribution
-
-### Tracking Groups
-- **APT Groups**: Advanced Persistent Threat organizations
-- **Cybercriminal Groups**: Financially motivated threat actors
-- **Hacktivists**: Ideologically motivated groups
-- **Nation-State**: Government-sponsored threat actors
-
-### Campaign Tracking
-- **Operation Names**: Specific campaign identifiers
-- **TTPs**: Tactics, Techniques, and Procedures mapping
-- **Infrastructure**: Shared infrastructure indicators
-- **Timeline**: Campaign activity timelines
+Key metrics tracked:
+- Total indicators by type and platform
+- Deployment success rates
+- Reputation changes
+- False positive rates
+- Effectiveness in preventing attacks
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- PowerShell 5.1 or later
-- Microsoft Graph PowerShell module
-- Microsoft Defender for Endpoint API access
-- Appropriate CTI feed subscriptions
+- Microsoft 365 E5 subscription
+- SharePoint site with admin access
+- Azure subscription with Logic Apps
+- Teams with app integration capabilities
 
 ### Initial Setup
-1. **Configure API Access**:
-   ```powershell
-   # Set up Microsoft Defender API connection
-   Connect-MgGraph -Scopes "ThreatIndicators.ReadWrite.OwnedBy"
-   ```
+1. Create the SharePoint indicator list
+2. Deploy the Teams app
+3. Configure Logic Apps for integration
+4. Set up API connections to security platforms
 
-2. **Import Initial IOC Set**:
-   ```powershell
-   # Import baseline malware hashes
-   .\Import-ThreatIntelligence.ps1 -IOCType "Hash" -SourceFile "baseline-malware.csv"
-   ```
+For detailed setup instructions, see the [Implementation Guide](./Documentation/Implementation-Guide.md).
 
-3. **Configure Automated Feeds**:
-   ```powershell
-   # Set up automated feed updates
-   .\Configure-AutomatedFeeds.ps1 -Schedule "Daily" -FeedList "premium-feeds.json"
-   ```
+---
 
-## 📋 IOC Management
-
-### IOC Lifecycle
-1. **Collection**: Automated collection from configured feeds
-2. **Validation**: Quality checks and false positive filtering
-3. **Enrichment**: Adding context and attribution data
-4. **Distribution**: Pushing to security tools and platforms
-5. **Aging**: Removing stale or outdated indicators
-
-### Quality Control
+**Last Updated**: August 2023 | **Maintained by**: SOC Team
 - **False Positive Filtering**: Whitelist management for known good indicators
 - **Confidence Scoring**: Assigning confidence levels to indicators
 - **Source Reputation**: Tracking feed reliability and accuracy
@@ -220,3 +220,75 @@ cti/
 ---
 
 **Last Updated**: July 2025 | **Maintained by**: SOC Team
+
+## 🛠️ Scripts and Tools
+
+### Core PowerShell Scripts
+```powershell
+# Create an indicator in the central system that will sync to all platforms
+.\Add-CTIIndicator.ps1 -Type "IPAddress" -Value "192.168.1.100" -Title "Malicious C2 Server" -TLP "Amber" -DeploymentTargets "MDE,EntraID,MDCA"
+
+# Remove an indicator from all platforms
+.\Remove-CTIIndicator.ps1 -IndicatorId "a1b2c3d4-e5f6-7890-abcd-1234567890ab"
+
+# Check indicator deployment status across all platforms
+.\Get-CTIDeploymentStatus.ps1 -IndicatorValue "192.168.1.100"
+
+# Validate indicator against reputation services
+.\Test-IndicatorReputation.ps1 -Value "192.168.1.100" -Type "IPAddress"
+```
+
+### Logic App Sync Management
+```powershell
+# Force sync from SharePoint to security platforms
+.\Sync-CTIToSecurityPlatforms.ps1 -ForceSync
+
+# Import indicators from CSV file into SharePoint
+.\Import-CTIIndicators.ps1 -CsvPath "C:\Temp\new-indicators.csv"
+
+# Check sync status of all Logic Apps
+.\Get-CTISyncStatus.ps1
+```
+
+## 📊 IOC Categories and Platform Mapping
+
+### Indicator Types and Destinations
+| Indicator Type | Microsoft 365 | Azure | On-Premises | Third-Party |
+|----------------|---------------|-------|-------------|-------------|
+| IP Address     | MDE, MDCA, Entra ID | Azure Firewall, Front Door WAF | Firewall, IPS | SIEM, TIP |
+| Domain         | MDE, Exchange EOP | Azure DNS Firewall | DNS Filtering | SIEM, TIP |
+| URL            | MDE, Exchange EOP/TABL | App Proxy | Proxy | SIEM, TIP |
+| File Hash      | MDE | Defender for Cloud | EDR | SIEM, TIP |
+| Certificate    | MDE | App Gateway | Network Security | SIEM, TIP |
+| Email          | Exchange EOP/TABL | - | Mail Gateway | SIEM, TIP |
+
+### Automatic Placement Logic
+- **IP Addresses with "email" in description** → Exchange Connection Filter
+- **IP Addresses (general)** → MDCA + Entra ID
+- **URLs with "phish" in description** → Exchange Tenant Allow Block List
+- **URLs (general)** → MDE + Exchange
+- **Domains** → MDE + Exchange dual deployment
+- **File Hashes** → MDE primary deployment
+- **Certificates** → MDE primary deployment
+
+## 🔄 Lifecycle Automation
+
+### Indicator Creation
+1. Indicator added to SharePoint (via Teams UI, PowerShell, or Logic App)
+2. SharePoint trigger activates deployment Logic App
+3. Logic App determines appropriate security platforms
+4. Indicator is deployed to all targeted platforms
+5. Deployment status is updated in SharePoint
+
+### Indicator Validation
+1. Scheduled Logic App checks indicator reputation
+2. Reputation sources include VirusTotal, Microsoft Security Graph, AlienVault
+3. Confidence score is updated based on validation results
+4. Indicators with low confidence are flagged for review
+
+### Indicator Removal
+1. Indicator marked as expired or false positive in SharePoint
+2. Removal Logic App triggered
+3. Indicator removed from all security platforms
+4. Record kept in SharePoint with status "Expired" or "FalsePositive"
+5. Removal status logged in action history

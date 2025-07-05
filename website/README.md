@@ -225,3 +225,44 @@ ClarityXDR implements several security best practices:
 ## License
 
 Copyright © 2025 ClarityXDR. All rights reserved.
+
+## Critical Post-Deployment Steps
+
+### 1. DNS Configuration
+Point your DNS A records for your domain and subdomains to your server's public IP address:
+- `yourdomain.com` → Your server IP
+- `api.yourdomain.com` → Your server IP
+- `traefik.yourdomain.com` → Your server IP
+
+### 2. Enable Database SSL (Important Security Measure)
+By default, the database connection uses an unencrypted connection initially to ensure first-time deployment success. After confirming the application is running correctly, enable SSL for database connections:
+
+```bash
+cd /opt/clarityxdr && sudo bash -c "$(declare -f enable_database_ssl); enable_database_ssl"
+```
+
+This command will:
+- Generate self-signed SSL certificates for PostgreSQL
+- Configure PostgreSQL to use SSL
+- Update the connection parameters to require SSL
+- Restart the services to apply changes
+
+**Why this is important:** Enabling SSL for database connections ensures that all traffic between the application and database is encrypted, protecting sensitive data from potential network-level attacks.
+
+### 3. Access and Credentials
+- Access the application at `https://yourdomain.com`
+- API endpoints are available at `https://api.yourdomain.com`
+- Traefik dashboard is available at `https://traefik.yourdomain.com`
+
+All credentials are stored in the `/opt/clarityxdr/CREDENTIALS.txt` file.
+
+## Maintenance
+
+### Common Commands
+- View logs: `cd /opt/clarityxdr/website && docker-compose logs -f`
+- Restart services: `systemctl restart clarityxdr`
+- Check status: `systemctl status clarityxdr`
+- Stop services: `systemctl stop clarityxdr`
+
+### Backups
+Database backups are automatically created daily in the `/opt/clarityxdr/website/backups` directory.

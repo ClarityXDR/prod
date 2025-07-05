@@ -1,0 +1,45 @@
+{
+    "SharePointSiteUrl": "https://contoso.sharepoint.com/sites/ThreatIntel",
+    "IndicatorsListName": "ThreatIndicatorsList",
+    "LogicAppUrls": {
+        "Orchestrator": "https://prod-xx.eastus.logic.azure.com:443/workflows/xxxxx/triggers/manual/paths/invoke",
+        "Deployment": "https://prod-xx.eastus.logic.azure.com:443/workflows/xxxxx/triggers/manual/paths/invoke",
+        "Removal": "https://prod-xx.eastus.logic.azure.com:443/workflows/xxxxx/triggers/manual/paths/invoke",
+        "Validation": "https://prod-xx.eastus.logic.azure.com:443/workflows/xxxxx/triggers/manual/paths/invoke"
+    },
+    "TeamsChannelUrl": "https://teams.microsoft.com/l/channel/12345/General",
+    "ValidationSources": [
+        {
+            "Name": "VirusTotal",
+            "Enabled": true,
+            "ApiKey": ""
+        },
+        {
+            "Name": "Microsoft Graph Security",
+            "Enabled": true
+        },
+        {
+            "Name": "AlienVault OTX",
+            "Enabled": false,
+            "ApiKey": ""
+        }
+    ],
+    "Defaults": {
+        "IndicatorExpiration": {
+            "IPAddress": 30,
+            "FileHash": 90,
+            "URL": 30,
+            "Domain": 60,
+            "Certificate": 90,
+            "Email": 15
+        },
+        "DeploymentTargets": {
+            "IPAddress": ["MDE", "EntraID", "MDCA"],
+            "FileHash": ["MDE"],
+            "URL": ["MDE", "ExchangeTABL"],
+            "Domain": ["MDE", "ExchangeTABL"],
+            "Certificate": ["MDE"],
+            "Email": ["ExchangeTABL"]
+        }
+    }
+}

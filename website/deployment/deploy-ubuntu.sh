@@ -296,6 +296,13 @@ setup_application() {
     mkdir -p letsencrypt backups repositories uploads client-rules logs
     chmod 755 letsencrypt backups repositories uploads client-rules logs
     
+    # Fix SQL initialization script for the JSONB issue
+    if [[ -f "docker-entrypoint-initdb.d/02-default-agents.sql" ]]; then
+        print_message $BLUE "Fixing SQL initialization script..."
+        sed -i 's/ARRAY\[/jsonb_build_array(/g' docker-entrypoint-initdb.d/02-default-agents.sql
+        sed -i 's/\],/),/g' docker-entrypoint-initdb.d/02-default-agents.sql
+    fi
+    
     # Create .env file with all configurations
     print_message $BLUE "Creating configuration file..."
     cat > .env << EOF
@@ -308,6 +315,7 @@ TRAEFIK_DASHBOARD_AUTH=$TRAEFIK_DASHBOARD_AUTH
 POSTGRES_DB=clarityxdr
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+DB_SSL_MODE=disable
 
 # Redis Configuration
 REDIS_PASSWORD=$REDIS_PASSWORD
@@ -515,37 +523,49 @@ EOF
     print_message $GREEN "Configuration backed up to $backup_dir"
 }
 
-cleanup_on_error() {
-    print_message $RED "Installation failed. Check $LOG_FILE for details."
-    print_message $YELLOW "To retry, run: sudo $0"
-    exit 1
+enable_database_ssl() {
+    print_message $BLUE "Enabling SSL for database connections..."
+    
+    cd "$INSTALL_DIR/website"
+    
+    # Create SSL certificates directory
+    mkdir -p ./postgres/ssl
+    cd ./postgres/ssl
+    
+    # Generate self-signed certificates
+    openssl req -new -text -passout pass:abcd -subj "/CN=postgres" -out server.req -keyout privkey.pem
+    openssl rsa -in privkey.pem -passin pass:abcd -out server.key
+    openssl req -x509 -in server.req -text -key server.key -out server.crt
+    chmod 600 server.key
+    
+    # Update PostgreSQL configuration
+    cat > ../postgresql.conf << EOF
+# SSL Configuration
+ssl = on
+ssl_cert_file = '/var/lib/postgresql/ssl/server.crt'
+ssl_key_file = '/var/lib/postgresql/ssl/server.key'
+EOF
+    
+    # Update environment file
+    cd "$INSTALL_DIR/website"
+    sed -i 's/DB_SSL_MODE=disable/DB_SSL_MODE=require/g' .env
+    
+    # Update docker-compose.yml to mount SSL files
+    if grep -q "ssl:/var/lib/postgresql/ssl" docker-compose.yml; then
+        print_message $GREEN "SSL volume mount already exists"
+    else
+        sed -i '/postgres_data/a \      - ./postgres/ssl:/var/lib/postgresql/ssl:ro' docker-compose.yml
+        sed -i '/POSTGRES_PASSWORD/a \      - POSTGRES_INITDB_ARGS=--data-checksums' docker-compose.yml
+        sed -i '/POSTGRES_PASSWORD/a \      - POSTGRES_HOST_AUTH_METHOD=md5' docker-compose.yml
+    fi
+    
+    # Restart services
+    docker-compose down
+    docker-compose up -d
+    
+    print_message $GREEN "Database SSL enabled. Services restarted."
 }
 
-main() {
-    # Set up error handling
-    trap cleanup_on_error ERR
-    
-    # Initialize log file
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE"
-    chmod 640 "$LOG_FILE"
-    
-    # Run installation steps
-    print_banner
-    check_prerequisites
-    install_packages
-    collect_configuration
-    setup_application
-    configure_firewall
-    start_services
-    create_systemd_service
-    display_results
-    
-    log "Installation completed successfully"
-}
-
-# Run main function
-main "$@"
 cleanup_on_error() {
     print_message $RED "Installation failed. Check $LOG_FILE for details."
     print_message $YELLOW "To retry, run: sudo $0"
