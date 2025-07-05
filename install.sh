@@ -118,6 +118,14 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 REACT_APP_API_URL=https://api.$DOMAIN
+DB_SSL_MODE=disable
+REDIS_PASSWORD=clarityxdr_redis_2024
+JWT_SECRET=${JWT_SECRET:-$(openssl rand -base64 32)}
+APP_ENV=production
+LOG_LEVEL=info
+CORS_ORIGINS=https://$DOMAIN
+BACKUP_SCHEDULE=0 2 * * *
+BACKUP_RETENTION_DAYS=7
 EOF
     
     # Create docker-compose.yml
@@ -155,6 +163,7 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
+      - DB_SSL_MODE=disable
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
       postgres:
@@ -254,6 +263,7 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
+      - DB_SSL_MODE=disable
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
       postgres:

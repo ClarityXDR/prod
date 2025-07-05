@@ -101,7 +101,7 @@ services:
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Database password required}
       DB_NAME: ${POSTGRES_DB:-clarityxdr}
-      DB_SSL_MODE: ${DB_SSL_MODE:-prefer}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
       
       # Redis
       REDIS_HOST: redis
