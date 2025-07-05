@@ -116,7 +116,8 @@ function Write-DeploymentLog {
     Add-Content -Path $script:LogFile -Value $logMessage
     
     # Write to console with color
-    $color = $Colors[$Level] ?? "White"
+    $color = $Colors[$Level]
+    if (-not $color) { $color = "White" }
     if ($NoNewLine) {
         Write-Host $Message -ForegroundColor $color -NoNewline
     } else {
