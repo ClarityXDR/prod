@@ -22,22 +22,22 @@
             "defaultValue": [
                 {
                     "tableName": "SigninLogs",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
                     "tableName": "AuditLogs",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
                     "tableName": "SecurityAlert",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
                     "tableName": "SecurityIncident",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
@@ -52,17 +52,17 @@
                 },
                 {
                     "tableName": "Corelight_DNS",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
                     "tableName": "Corelight_HTTP",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
                     "tableName": "Corelight_SSL",
-                    "tier": "Dedicated",
+                    "tier": "Standard",
                     "retentionInDays": 90
                 },
                 {
@@ -83,6 +83,7 @@
             "type": "Microsoft.OperationalInsights/workspaces/tables",
             "apiVersion": "2022-10-01",
             "name": "[concat(parameters('workspaceName'), '/', parameters('tableConfigurations')[copyIndex()].tableName)]",
+            "location": "[parameters('location')]",
             "copy": {
                 "name": "tableCopy",
                 "count": "[length(parameters('tableConfigurations'))]"
@@ -90,7 +91,7 @@
             "properties": {
                 "retentionInDays": "[parameters('tableConfigurations')[copyIndex()].retentionInDays]",
                 "totalRetentionInDays": "[parameters('tableConfigurations')[copyIndex()].retentionInDays]",
-                "tier": "[parameters('tableConfigurations')[copyIndex()].tier]"
+                "plan": "[parameters('tableConfigurations')[copyIndex()].tier]"
             }
         }
     ],

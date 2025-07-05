@@ -145,6 +145,69 @@
             },
             "defaultValue": true
         },
+        "tableConfigurations": {
+            "type": "array",
+            "metadata": {
+                "description": "Array of table configurations including name, tier, and retention"
+            },
+            "defaultValue": [
+                {
+                    "tableName": "SigninLogs",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "AuditLogs",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "SecurityAlert",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "SecurityIncident",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "NonInteractiveUserSignInLogs",
+                    "tier": "Auxiliary",
+                    "retentionInDays": 30
+                },
+                {
+                    "tableName": "ServicePrincipalSignInLogs",
+                    "tier": "Auxiliary",
+                    "retentionInDays": 30
+                },
+                {
+                    "tableName": "Corelight_DNS",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "Corelight_HTTP",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "Corelight_SSL",
+                    "tier": "Standard",
+                    "retentionInDays": 90
+                },
+                {
+                    "tableName": "Corelight_Conn",
+                    "tier": "Auxiliary",
+                    "retentionInDays": 30
+                },
+                {
+                    "tableName": "Corelight_SMB",
+                    "tier": "Basic",
+                    "retentionInDays": 180
+                }
+            ]
+        },
         "enableUeba": {
             "type": "bool",
             "metadata": {
@@ -328,9 +391,6 @@
                     },
                     "subscriptionId": {
                         "value": "[variables('subscriptionGuid')]"
-                    },
-                    "entraIDTier": {
-                        "value": "[parameters('entraIDTier')]"
                     }
                 }
             }
@@ -466,17 +526,11 @@
                     "workspaceName": {
                         "value": "[parameters('workspaceName')]"
                     },
-                    "standardTierRetention": {
-                        "value": "[parameters('standardTierRetention')]"
-                    },
-                    "auxiliaryTierRetention": {
-                        "value": "[parameters('auxiliaryTierRetention')]"
-                    },
-                    "basicTierRetention": {
-                        "value": "[parameters('basicTierRetention')]"
-                    },
                     "location": {
                         "value": "[parameters('location')]"
+                    },
+                    "tableConfigurations": {
+                        "value": "[parameters('tableConfigurations')]"
                     }
                 }
             }

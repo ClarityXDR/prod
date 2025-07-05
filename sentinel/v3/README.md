@@ -1,5 +1,7 @@
 # Microsoft Sentinel All-In-One V3: Cost-Optimized Deployment
 
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FClarityXDR%2Fprod%2Frefs%2Fheads%2Fmain%2Fsentinel%2Fv3%2Fazuredeploy.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FClarityXDR%2Fprod%2Frefs%2Fheads%2Fmain%2Fsentinel%2Fv3%2FcreateUIDefinition.json)
+
 ## Overview
 
 Microsoft Sentinel All-In-One V3 introduces advanced cost optimization features to help organizations effectively manage their security monitoring costs while maintaining comprehensive threat detection capabilities. This guide explains the key cost-saving features and how to implement them effectively.
@@ -47,6 +49,12 @@ A specialized workbook provides visibility into your Sentinel costs:
 ## Implementing Cost Controls
 
 ### Quick Deployment
+
+**Option 1: Deploy to Azure (Recommended)**
+
+Click the blue "Deploy to Azure" button at the top of this README for a guided deployment experience with a custom UI.
+
+**Option 2: Azure CLI**
 
 For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
